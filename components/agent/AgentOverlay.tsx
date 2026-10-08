@@ -6,8 +6,15 @@
 // for that (lib/agent/concierge.ts checkEmbeddable), so a blocked site gets a
 // card with the shop's details and a new-tab button instead of a silently
 // blank frame. It fills whatever height its parent column leaves it.
+//
+// When the overlay is for buying a particular item, the Shopper's hosted
+// browser takes the frame's place: its latest screenshot and step while it
+// shops, then what it found and a link that opens the cart in the user's own
+// browser.
 
 import { useEffect } from "react";
+import { Spinner } from "@/components/happy-oyster/ui";
+import type { ShopperView } from "./use-shopper";
 
 export interface OverlayTarget {
   title: string;
@@ -15,13 +22,17 @@ export interface OverlayTarget {
   url: string;
   embeddable: boolean;
   note: string | null;
+  /** What the Shopper should find here; null for a plain ordering page. */
+  task: string | null;
 }
 
 export function AgentOverlay({
   target,
+  shopper = null,
   onClose,
 }: {
   target: OverlayTarget;
+  shopper?: ShopperView | null;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -95,13 +106,15 @@ export function AgentOverlay({
         {target.url}
       </div>
 
-      {target.note && (
+      {target.note && !shopper && (
         <p className="px-0.5 text-[12px] leading-snug text-muted-foreground">
           {target.note}
         </p>
       )}
 
-      {target.embeddable ? (
+      {shopper ? (
+        <ShopperScreen target={target} shopper={shopper} />
+      ) : target.embeddable ? (
         <iframe
           src={target.url}
           title={target.title}
@@ -120,6 +133,90 @@ export function AgentOverlay({
             target="_blank"
             rel="noreferrer noopener"
             className="inline-flex h-9 items-center rounded-full bg-black px-5 text-[13px] font-medium text-white transition hover:bg-[#222]"
+          >
+            Open {target.title} ↗
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShopperScreen({
+  target,
+  shopper,
+}: {
+  target: OverlayTarget;
+  shopper: ShopperView;
+}) {
+  const { status, image, title, steps, result, error } = shopper;
+  const link = result?.cart_url ?? result?.product_url ?? null;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[14px] bg-black/[0.04] ring-1 ring-black/[0.06]">
+        {image ? (
+          // A data URL streamed from the hosted browser; next/image adds nothing.
+          <img
+            src={image}
+            alt={title ?? "The shopper's browser"}
+            className="h-full w-full object-contain object-top"
+          />
+        ) : (
+          status === "running" && (
+            <div className="flex flex-col items-center gap-2 text-[12px] text-muted-foreground">
+              <Spinner />
+              {steps === 0 ? "Starting a browser…" : "Waiting for the first screenshot…"}
+            </div>
+          )
+        )}
+      </div>
+
+      {status === "running" && (
+        <div className="flex items-center gap-2 px-0.5">
+          <Spinner />
+          <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
+            {title ?? `Looking for ${target.task ?? "it"}`}
+          </span>
+          {steps > 0 && (
+            <span className="shrink-0 text-[11px] tabular-nums text-tertiary">
+              step {steps}
+            </span>
+          )}
+        </div>
+      )}
+
+      {status === "done" && result && (
+        <div className="flex flex-col gap-2 rounded-[14px] bg-white/80 px-3 py-2.5 ring-1 ring-black/[0.06]">
+          <div className="flex min-w-0 items-baseline justify-between gap-2">
+            <span className="truncate text-[13px] font-semibold text-foreground">
+              {result.product_name ?? "No match found"}
+            </span>
+            {result.price && (
+              <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
+                {result.price}
+              </span>
+            )}
+          </div>
+          <p className="text-[12px] leading-snug text-muted-foreground">{result.summary}</p>
+          <a
+            href={link ?? target.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex h-9 items-center justify-center rounded-full bg-black px-5 text-[13px] font-medium text-white transition hover:bg-[#222]"
+          >
+            {result.cart_url ? "Open cart ↗" : result.product_url ? "View product ↗" : `Open ${target.title} ↗`}
+          </a>
+        </div>
+      )}
+
+      {status === "error" && (
+        <div className="flex flex-col gap-2 rounded-[14px] bg-destructive/[0.06] px-3 py-2.5">
+          <p className="break-words text-[12px] leading-snug text-destructive">{error}</p>
+          <a
+            href={target.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex h-9 items-center justify-center rounded-full bg-black px-5 text-[13px] font-medium text-white transition hover:bg-[#222]"
           >
             Open {target.title} ↗
           </a>

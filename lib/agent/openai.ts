@@ -19,6 +19,8 @@ import type { ImageDetail, SearchContextSize, TraceToolCall } from "./protocol";
 export const AGENT_MODEL = process.env.AGENT_MODEL ?? "gpt-6.1-sol";
 /** The Director: looks at a frame every few seconds, so cheap and quick. */
 export const AGENT_FAST_MODEL = process.env.AGENT_FAST_MODEL ?? "gpt-6-luna";
+/** The Shopper: drives the Agents API's hosted browser (computer use). */
+export const AGENT_BROWSER_MODEL = process.env.AGENT_BROWSER_MODEL ?? "gpt-6-astra";
 
 export class AgentConfigError extends Error {}
 

@@ -15,7 +15,7 @@
 
 import { useSyncExternalStore } from "react";
 
-export type AgentSource = "user" | "director" | "concierge";
+export type AgentSource = "user" | "director" | "concierge" | "shopper";
 
 export type AgentEvent = { id: number; at: number } & (
   | { kind: "user_say"; text: string }
@@ -28,6 +28,9 @@ export type AgentEvent = { id: number; at: number } & (
   | { kind: "overlay_closed"; title: string; openSeconds: number }
   | { kind: "overlay_pending"; title: string; condition: string }
   | { kind: "overlay_cancelled"; title: string }
+  | { kind: "shopper_started"; title: string; task: string }
+  | { kind: "shopper_note"; text: string }
+  | { kind: "shopper_done"; title: string; summary: string; url: string | null }
   | { kind: "error"; source: AgentSource; text: string }
 );
 
@@ -105,6 +108,14 @@ export function describeEvent(event: AgentEvent): string {
       return `[${t}] the pending ${event.title} overlay was called off`;
     case "overlay_closed":
       return `[${t}] user closed the ${event.title} overlay after ${event.openSeconds}s`;
+    case "shopper_started":
+      return `[${t}] shopper is looking on ${event.title} for: ${event.task}`;
+    case "shopper_note":
+      return `[${t}] shopper: ${event.text}`;
+    case "shopper_done":
+      return `[${t}] shopper finished on ${event.title}: ${event.summary}${
+        event.url ? ` (${event.url})` : ""
+      }`;
     case "error":
       return `[${t}] ${event.source} error: ${event.text}`;
   }

@@ -15,6 +15,10 @@
 //               "he's at the till") the overlay is held and a frame goes to
 //               /api/agent/watch every few seconds until it shows that
 //               moment, or the wait times out and it opens anyway.
+//   Shopper   — when the Concierge's overlay is for buying a particular item
+//               (shopping_task), a hosted browser shops the store for it and
+//               the overlay shows its screenshots, then the cart link
+//               (use-shopper.ts → /api/agent/shopper).
 //
 // The Director is on unless the debug panel's Settings tab turns it off;
 // both agents read their model, prompt and other knobs from lib/agent/
@@ -51,6 +55,7 @@ import type { ConciergeOutput } from "@/lib/agent/concierge";
 import type { WatcherOutput } from "@/lib/agent/watcher";
 import type { WorldSession } from "@/components/happy-oyster/use-world-session";
 import type { OverlayTarget } from "./AgentOverlay";
+import { useShopper, type ShopperView } from "./use-shopper";
 
 export interface AgentRuntime {
   events: AgentEvent[];
@@ -59,6 +64,8 @@ export interface AgentRuntime {
   error: string | null;
   overlay: OverlayTarget | null;
   closeOverlay: () => void;
+  /** The Shopper at work in the open overlay, if it's for buying an item. */
+  shopper: ShopperView | null;
   /** An overlay found but held until the video shows the moment it's for. */
   pending: { title: string; condition: string } | null;
   cancelPending: () => void;
@@ -158,6 +165,21 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
     setPendingState(next);
   }, []);
 
+  // ── Shopper ────────────────────────────────────────────────────────────────
+  const shoppingAt = useRef<string | null>(null);
+  const shopper = useShopper({
+    onNote: (text) => logEvent({ kind: "shopper_note", text }),
+    onDone: (result) =>
+      logEvent({
+        kind: "shopper_done",
+        title: shoppingAt.current ?? "the store",
+        summary: result.summary,
+        url: result.cart_url ?? result.product_url,
+      }),
+    onError: (text) => logEvent({ kind: "error", source: "shopper", text }),
+  });
+  const { start: startShopper, stop: stopShopper } = shopper;
+
   const openOverlay = useCallback(
     (target: OverlayTarget) => {
       setPending(null);
@@ -169,8 +191,19 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
         closedAt: null,
       };
       logEvent({ kind: "overlay", title: target.title, url: target.url });
+      if (target.task) {
+        shoppingAt.current = target.title;
+        logEvent({ kind: "shopper_started", title: target.title, task: target.task });
+        // The frame now is the moment the overlay was waiting for, so it's
+        // the best picture of the item there is.
+        void startShopper({
+          url: target.url,
+          task: target.task,
+          screenshot: captureFrame(getSettings().screenshotWidth),
+        });
+      } else stopShopper();
     },
-    [setPending],
+    [setPending, startShopper, stopShopper],
   );
 
   const cancelPending = useCallback(() => {
@@ -223,6 +256,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
             url: result.overlay_url,
             embeddable: result.embeddable,
             note: plainText(result.reasoning),
+            task: result.shopping_task,
           };
           // Hold it until the video catches up — unless there's no video to
           // watch, in which case there's nothing to wait for.
@@ -290,6 +324,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
 
   const closeOverlay = useCallback(() => {
     setOverlay(null);
+    stopShopper();
     const last = lastOverlay.current;
     if (!last || last.closedAt !== null) return;
     last.closedAt = Date.now();
@@ -298,7 +333,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
       title: last.title,
       openSeconds: Math.round((last.closedAt - last.openedAt) / 1000),
     });
-  }, []);
+  }, [stopShopper]);
 
   return {
     events,
@@ -306,6 +341,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
     error,
     overlay,
     closeOverlay,
+    shopper: overlay ? shopper.view : null,
     pending: pending
       ? { title: pending.target.title, condition: pending.condition }
       : null,

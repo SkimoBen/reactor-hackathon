@@ -317,6 +317,26 @@ function Row({ event }: { event: AgentEvent }) {
           <span className="text-muted-foreground">Closed {event.title}</span>
         </Line>
       );
+    case "shopper_started":
+      return (
+        <Line label="Shopper" tone="text-[#7c3aed]">
+          <span className="text-muted-foreground">
+            Shopping {event.title} for {event.task}
+          </span>
+        </Line>
+      );
+    case "shopper_note":
+      return (
+        <Line label="Shopper" tone="text-[#7c3aed]">
+          <span className="text-muted-foreground">{event.text}</span>
+        </Line>
+      );
+    case "shopper_done":
+      return (
+        <Line label="Shopper" tone="text-[#7c3aed]">
+          <span className="text-muted-foreground">{event.summary}</span>
+        </Line>
+      );
     case "error":
       return (
         <Line label={event.source} tone="text-destructive">

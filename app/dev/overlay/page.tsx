@@ -2,6 +2,8 @@
 // without talking the agent into ordering something. Probes the URL the same
 // way the concierge route does, so blocked sites show the fallback card.
 //   /dev/overlay?url=https://example.com&title=Joe%27s%20Pizza
+// Add &task=… to run the Shopper on the store for real (hosted browser), e.g.
+//   /dev/overlay?url=https://www.allbirds.com&task=a%20blue%20crew-neck%20T-shirt
 
 import { notFound } from "next/navigation";
 import { checkEmbeddable } from "@/lib/agent/concierge";
@@ -28,6 +30,7 @@ export default async function Page({
         url,
         embeddable,
         note: params.note ?? null,
+        task: params.task ?? null,
       }}
     />
   );

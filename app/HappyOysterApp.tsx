@@ -86,6 +86,7 @@ function Shell({
             agents.overlay && (
               <AgentOverlay
                 target={agents.overlay}
+                shopper={agents.shopper}
                 onClose={agents.closeOverlay}
               />
             )

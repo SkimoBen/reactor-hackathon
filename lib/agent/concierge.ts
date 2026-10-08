@@ -16,6 +16,10 @@
 // The overlay is an <iframe>, and most ordering sites refuse to be framed, so
 // the URL is probed for X-Frame-Options / CSP frame-ancestors here, server
 // side — the browser can't tell a blocked frame from a slow one.
+//
+// When the intent is buying a particular item (the blue shirt on screen), it
+// also writes shopping_task, and the browser hands the store to the Shopper
+// (lib/agent/shopper.ts), which finds the item and fills a cart for real.
 
 import { USER_LOCATION } from "./config";
 import {
@@ -58,6 +62,7 @@ export interface ConciergeDecision {
   overlay_url: string | null;
   world_instruction: string | null;
   open_when: string | null;
+  shopping_task: string | null;
 }
 
 export interface ConciergeOutput extends ConciergeDecision {
@@ -76,6 +81,7 @@ const SCHEMA = {
     "overlay_url",
     "world_instruction",
     "open_when",
+    "shopping_task",
   ],
   properties: {
     action: { type: "string", enum: ["none", "open_overlay", "cancel_pending"] },
@@ -113,6 +119,11 @@ const SCHEMA = {
       type: ["string", "null"],
       description:
         "The moment in the video to wait for before the overlay opens, written so it can be checked in a single frame, e.g. 'the man is at the checkout counter handing over the blue shirt'. null opens it at once — only when the frame already shows that moment, or the user asked to see the page now.",
+    },
+    shopping_task: {
+      type: ["string", "null"],
+      description:
+        "Only when the user wants to buy a specific product (clothing, a book, a gadget…), not food orders or bookings: what a shopping agent should find on overlay_url, described from the frame and the utterance so it can search for it, e.g. 'a plain royal-blue crew-neck cotton T-shirt, short sleeves, regular fit'. overlay_url should then be the store's own online shop. null otherwise.",
     },
   },
 };
@@ -187,6 +198,7 @@ export async function runConcierge(input: ConciergeInput): Promise<ConciergeOutp
     overlay_url: open ? overlayUrl : null,
     world_instruction: decision.world_instruction?.trim() || null,
     open_when: open ? decision.open_when?.trim() || null : null,
+    shopping_task: open ? decision.shopping_task?.trim() || null : null,
     embeddable: open ? await checkEmbeddable(overlayUrl) : false,
     trace,
   };
