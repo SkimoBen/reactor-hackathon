@@ -44,8 +44,49 @@ The API key never reaches the browser: the server route [`app/api/reactor/token/
 ## What you can do with it
 
 - **One preset world.** The prompt and first frame live in [`lib/agent/config.ts`](lib/agent/config.ts) (`START_SCENE`). The transcript's gear opens a debug panel whose Settings tab can override the prompt, resolution, layout and narrative, plus the agents' models and system prompts ([`lib/agent/settings.ts`](lib/agent/settings.ts)).
-- **Talk to it.** Pressing Explore turns on browser speech recognition (Chrome / Safari); each phrase goes to the Concierge agent, which can open a real shop's page or steer the scene. Browsers without it get a text field in the panel.
+- **Talk to it.** Hold space (or the panel's mic button) and speak; Gemini 3.5 Transcribe Live transcribes it as you talk, and each phrase goes to the Concierge agent, which can open a real shop's page or steer the scene. Browsers without a microphone API get a text field in the panel.
 - **Watch the Director.** While the travel is live, the Director agent looks at a frame every few seconds and sends the world instructions; its observations and moves appear in the transcript.
+
+## Voice (Gemini 3.5 Transcribe Live)
+
+Push-to-talk runs on `gemini-3.5-transcribe-live` in SMART mode, which drops filler words and false starts. Each press opens a transcription session over a single-use ephemeral token, so `GEMINI_API_KEY` never reaches the browser; audio captured while it connects is held, so the first words aren't lost. The phrase being spoken shows in grey in the transcript; each finished phrase goes to the Concierge. On release, Gemini gets the end of the audio and a moment to commit the last words, and a phrase it never commits is sent as-is.
+
+```
+hold space ─▶ AudioWorklet (16 kHz PCM16) ─▶ Gemini Live ─▶ interim ─▶ transcript panel
+                                                         └▶ final   ─▶ Concierge
+```
+
+| File | What's in it |
+| --- | --- |
+| [`components/agent/use-speech.ts`](components/agent/use-speech.ts) | Push-to-talk: space / mic button → one transcription session per press. |
+| [`lib/transcriber.ts`](lib/transcriber.ts) | Mic capture and the Gemini Live session; `finish()` ends a press and waits for the last words. |
+| [`public/pcm-recorder-worklet.js`](public/pcm-recorder-worklet.js) | AudioWorklet: native-rate mic → 16 kHz mono PCM16 in 100 ms chunks. |
+| [`app/api/gemini/token/route.ts`](app/api/gemini/token/route.ts) | Mints a single-use Gemini Live token locked to the transcription model. |
+
+## Where you are, and what's around you
+
+While you explore, real store names float over the storefronts and a mini-map in the bottom-right corner follows the character around real Manhattan streets.
+
+- **Position, from the video itself.** HappyOyster reports no position, so ~10 times a second the app reads the camera's motion off the live video with a coarse optical flow ([`lib/walk/flow.ts`](lib/walk/flow.ts)): the scene expanding means walking, sliding sideways means turning, neither means standing still. A tracker ([`lib/walk/tracker.ts`](lib/walk/tracker.ts)) snaps that onto the real street grid around Broadway ([`lib/walk/streets.ts`](lib/walk/streets.ts), from OpenStreetMap), like a car's navigation does:
+  - stop, and the cursor stops; walk, and it moves along the block at your pace (default **16 min/mile**, changeable in the mini-map);
+  - turn at a corner, and it takes the cross street on that side; turn around, and it walks back;
+  - turn mid-block, and it stays put "at a storefront" until you turn back (keep walking that way and it takes the nearest corner, since the generated world's corners won't line up exactly with the map's).
+
+  The arrow shows where the character faces and the blue line where they've been. Every travel starts at Broadway & W 26th St, the start frame's corner.
+- **Store names.** For each block you're on (and the one ahead, plus the cross streets as you near a corner), [`/api/walk/stores`](app/api/walk/stores/route.ts) asks Gemini with **Grounding with Google Maps** for the businesses on each side of the street, keeping only names backed by a Google Maps place (with its Maps link). A lookup takes ~30 s, so blocks are fetched ahead of you and kept for 30 minutes.
+- **Placing them.** While the world streams, [`/api/walk/label`](app/api/walk/label/route.ts) sends the current frame to Gemini vision with this block's stores, split into your left and right for the way you're walking, and gets back boxes for the storefronts it can label. Tags pin to the top of each box, link to Google Maps, and fade when they go stale.
+
+Tuning: the motion reader assumes a ~70° horizontal field of view and treats a scene expanding faster than 6%/s as walking ([`components/walk/use-walk.ts`](components/walk/use-walk.ts)). Open the app with `?walkdebug` to see the live readings on the mini-map while you adjust them.
+
+Limits worth knowing: positions are estimated from camera motion, so cinematic camera moves can read as steps or turns, and distances are only as right as the pace. The world is generated, so after the opening photo a tag is the most plausible real store for that storefront, not recognition. A labelling call takes ~5 s, so tags trail the moving camera a little. Each walk costs a few Google Maps grounding queries plus a vision call every few seconds on your Gemini key. Google requires Maps-sourced names to be attributed (the "Store names: Google Maps" chip and the tags' Maps links do that), and OpenStreetMap's tile policy asks for light use with attribution.
+
+| File | What's in it |
+| --- | --- |
+| [`components/walk/WalkLayer.tsx`](components/walk/WalkLayer.tsx) | Mounts the overlay and mini-map on the stage. |
+| [`components/walk/use-walk.ts`](components/walk/use-walk.ts) | Samples the video, reads its motion, and runs the tracker. |
+| [`components/walk/use-store-labels.ts`](components/walk/use-store-labels.ts) | Block prefetching and the frame-labelling loop. |
+| [`components/walk/StoreLabelOverlay.tsx`](components/walk/StoreLabelOverlay.tsx) | The tags, mapped through the video's object-cover crop and decluttered. |
+| [`components/walk/MiniMap.tsx`](components/walk/MiniMap.tsx) | The corner map: arrow, trail, street, and what the character is doing. |
 
 ## How it works
 
@@ -68,10 +109,11 @@ Everything model-specific runs through the typed **`@reactor-models/happy-oyster
 | Env var                        | Required   | What it does                                                                                                                                                     |
 | ------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `REACTOR_API_KEY`              | yes (live) | Server-side key exchanged for session JWTs by `app/api/reactor/token/route.ts`.                                                                                  |
+| `GEMINI_API_KEY`               | voice only | Server-side Gemini key that mints the push-to-talk transcription tokens (`gemini-3.5-transcribe-live`). |
 | `NEXT_PUBLIC_REACTOR_API_URL`  | no         | Reactor API base URL. Defaults to `https://api.reactor.inc`.                                                                                                     |
 | `NEXT_PUBLIC_HO_LOCAL_RUNTIME` | no         | Set to `1` to talk straight to a runtime-served model (adventure on `:8080`, directing on `:8081`), skipping the Reactor Platform: no `REACTOR_API_KEY`, no JWT. |
 
-If `REACTOR_API_KEY` is missing, the app renders a friendly setup landing instead of erroring (see [`app/SetupRequired.tsx`](app/SetupRequired.tsx)).
+`REACTOR_API_KEY` is what links the app to your Reactor account. If it's missing, still the `.env.example` placeholder, or rejected by Reactor (checked once per server start in [`lib/reactor-auth.ts`](lib/reactor-auth.ts)), the app renders a setup landing that says which, instead of failing at Connect (see [`app/SetupRequired.tsx`](app/SetupRequired.tsx)).
 
 ## Code tour
 

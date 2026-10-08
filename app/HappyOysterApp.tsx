@@ -10,7 +10,9 @@
 // While exploring, the user holds space to talk (use-speech.ts → the
 // Concierge) and the Director watches the stream; the transcript panel in the
 // stage's corner shows both, with any shop the Concierge opens docked under
-// it. The intent lives here, above the provider, so the session hook
+// it. The walk layer pins real store names (Google Maps, via Gemini) over the
+// storefronts and shows where you are on a mini-map in the opposite corner.
+// The intent lives here, above the provider, so the session hook
 // can drive it; nothing connects until Explore is pressed.
 
 import { useCallback, useState } from "react";
@@ -23,6 +25,7 @@ import { useAgentRuntime } from "@/components/agent/use-agent-runtime";
 import { useSpeech } from "@/components/agent/use-speech";
 import { AgentPanel } from "@/components/agent/AgentPanel";
 import { AgentOverlay } from "@/components/agent/AgentOverlay";
+import { WalkLayer } from "@/components/walk/WalkLayer";
 
 export function HappyOysterApp() {
   const [intent, setIntent] = useState<WorldIntent | null>(null);
@@ -74,6 +77,7 @@ function Shell({
         preparing={preparing}
         startError={startError}
       >
+        <WalkLayer session={session} />
         <AgentPanel
           events={agents.events}
           speech={speech}

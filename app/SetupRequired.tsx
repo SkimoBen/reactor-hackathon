@@ -1,21 +1,35 @@
 import { Header } from "@/components/Header";
+import {
+  ACCOUNT_API_KEYS_URL,
+  type ReactorKeyProblem,
+} from "@/lib/reactor-auth";
 
-const ACCOUNT_API_KEYS_URL = "https://www.reactor.inc/account/api-keys";
+// What's wrong with the link to your Reactor account, in one sentence.
+const INTRO: Record<ReactorKeyProblem, string> = {
+  missing:
+    "This app needs your Reactor API key to mint session tokens. You only need to do this once.",
+  placeholder:
+    "REACTOR_API_KEY in .env.local is still the example placeholder from .env.example. Replace it with your own key.",
+  rejected:
+    "Reactor rejected the REACTOR_API_KEY in .env.local: it may be mistyped, revoked, or from another account. Paste a current key.",
+};
 
-// Server Component shown when REACTOR_API_KEY is missing.
+// Server Component shown when REACTOR_API_KEY is missing, still the
+// placeholder, or rejected by Reactor (see lib/reactor-auth.ts).
 // Pure markup, no hooks, no client components, so it stays server-rendered.
-export function SetupRequired() {
+export function SetupRequired({ problem }: { problem: ReactorKeyProblem }) {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Header />
       <main className="flex flex-1 items-center justify-center p-6">
         <div className="w-full max-w-lg rounded-[22px] bg-card p-8 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_32px_rgba(0,0,0,0.06)] sm:p-10">
           <h2 className="text-[32px] font-semibold leading-tight tracking-[-0.025em] text-foreground">
-            Setup required.
+            {problem === "missing"
+              ? "Setup required."
+              : "Link your Reactor account."}
           </h2>
           <p className="mt-2 text-[17px] leading-snug text-muted-foreground">
-            This app needs a Reactor API key to mint session tokens. You only
-            need to do this once.
+            {INTRO[problem]}
           </p>
 
           <ol className="mt-8 space-y-5 text-[15px] leading-relaxed text-foreground">
