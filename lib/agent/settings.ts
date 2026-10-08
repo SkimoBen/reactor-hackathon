@@ -82,7 +82,8 @@ export const DEFAULT_SETTINGS: AgentSettings = {
     model: "",
     systemPrompt: CONCIERGE_SYSTEM,
     webSearch: true,
-    searchContextSize: "medium",
+    // Low: one quick search for "a" match beats a thorough one for the best.
+    searchContextSize: "low",
     imageDetail: "low",
     waitIntervalMs: CONCIERGE_WAIT_INTERVAL_MS,
     waitTimeoutMs: CONCIERGE_WAIT_TIMEOUT_MS,

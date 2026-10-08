@@ -107,6 +107,7 @@ function Shell({
           pending={agents.pending}
           onCancelPending={agents.cancelPending}
           onSay={say}
+          onClear={agents.clear}
           overlay={
             agents.overlay && (
               <AgentOverlay

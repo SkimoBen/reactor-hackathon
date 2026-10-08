@@ -107,7 +107,7 @@ const SCHEMA = {
     world_instruction: {
       type: ["string", "null"],
       description:
-        "Optional: one scene direction (≤20 words) so the video plays along, e.g. 'You step up to the counter and the pizzaiolo looks up.'",
+        "One scene direction (≤20 words) so the video plays along, e.g. 'You step up to the counter and the pizzaiolo looks up.' Required whenever the user directs the character somewhere or to do something, e.g. 'He crosses Broadway and walks into the clothing store.' null only for small talk or questions.",
     },
     open_when: {
       type: ["string", "null"],
@@ -143,12 +143,15 @@ export async function runConcierge(input: ConciergeInput): Promise<ConciergeOutp
     .replaceAll("{place}", input.place)
     .replaceAll("{address}", USER_LOCATION.address);
   const imageDetail = settings.imageDetail ?? "low";
-  const searchContextSize = settings.searchContextSize ?? "medium";
+  const searchContextSize = settings.searchContextSize ?? "low";
   const webSearch = settings.webSearch ?? true;
 
   const response = await client.responses.create({
     model,
     instructions,
+    // The user is waiting on this call, so think briefly. "low" is the floor
+    // with web search; "minimal" rejects the tool.
+    reasoning: { effort: "low" },
     tools: webSearch ? [webSearchTool(searchContextSize)] : [],
     // Return the URLs each search drew on, for the debug panel.
     include: webSearch ? ["web_search_call.action.sources"] : undefined,
@@ -240,7 +243,8 @@ function sanitizeUrl(value: string | null): string | null {
  * or a CSP frame-ancestors directive; anything we can't fetch counts as no. */
 export async function checkEmbeddable(url: string): Promise<boolean> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6000);
+  // Short: a site this slow to answer would be a slow overlay anyway.
+  const timer = setTimeout(() => controller.abort(), 2500);
   try {
     const res = await fetch(url, {
       method: "GET",

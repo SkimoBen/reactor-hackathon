@@ -1,32 +1,49 @@
 "use client";
 
-// Push-to-talk voice transcription through Gemini 3.5 Transcribe Live
-// (lib/transcriber.ts): the mic streams to Gemini over a single-use ephemeral
-// token from /api/gemini/token, so the Gemini key never reaches the browser,
-// and it works in any browser with a microphone and AudioWorklet (Firefox
-// included). The mic is only live while the user holds the space bar (or the
-// panel's mic button). Each finished phrase goes to onFinal — the Concierge's
-// trigger — and the phrase still being spoken is exposed as `interim` so the
-// panel can show it as it forms.
+// Push-to-talk voice transcription through the browser's Web Speech API (Chrome
+// and Safari; Chrome streams the audio to Google for recognition). The mic is
+// only live while the user holds the space bar (or the panel's mic button).
+// Each finished phrase goes to onFinal — the Concierge's trigger — and the
+// phrase still being spoken is exposed as `interim` so the panel can show it
+// as it forms.
 //
-// Every press opens its own transcription session; audio captured while it
-// connects is held and sent once it's up, so the first words aren't lost.
-// Releasing stops the mic and lets Gemini finalize what it heard; whatever is
-// still interim when the session closes is sent as the last phrase so a quick
-// release doesn't drop words.
+// Recognition stops on its own after silence, so while the key is held it is
+// restarted from onend. Releasing the key calls stop(), which lets the
+// recognizer finalize what it heard; whatever is still interim when it ends is
+// sent as the last phrase so a quick release doesn't drop words.
 //
 // The microphone prompt needs a user gesture, so prime() runs from the Explore
 // click to ask up front rather than on the first key press.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LiveTranscriber } from "@/lib/transcriber";
 
-function micSupported(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    !!navigator.mediaDevices?.getUserMedia &&
-    typeof AudioWorkletNode !== "undefined"
-  );
+interface RecognitionResult {
+  isFinal: boolean;
+  0: { transcript: string };
+}
+interface RecognitionEvent {
+  resultIndex: number;
+  results: ArrayLike<RecognitionResult>;
+}
+interface Recognition {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: RecognitionEvent) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+type RecognitionCtor = new () => Recognition;
+
+function recognitionCtor(): RecognitionCtor | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as {
+    SpeechRecognition?: RecognitionCtor;
+    webkitSpeechRecognition?: RecognitionCtor;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
 // Space typed into a field is text, not push-to-talk.
@@ -50,14 +67,6 @@ export interface Speech {
   prime: () => void;
 }
 
-// One hold of the key: its own transcriber, and the hypothesis it last
-// reported, which becomes the final phrase if Gemini never commits it.
-interface Press {
-  transcriber: LiveTranscriber;
-  started: Promise<boolean>;
-  interim: string;
-}
-
 export function useSpeech(
   onFinal: (text: string) => void,
   enabled: boolean,
@@ -66,75 +75,83 @@ export function useSpeech(
   const [listening, setListening] = useState(false);
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const recognition = useRef<Recognition | null>(null);
   const wanted = useRef(false);
-  // The press whose interim the panel shows: the one being held, or the last
-  // one while it finishes. An older press may still be finishing behind it.
-  const shown = useRef<Press | null>(null);
+  const pending = useRef("");
   const finalRef = useRef(onFinal);
   finalRef.current = onFinal;
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
   // Feature-detect after mount so the server render and first client render agree.
-  useEffect(() => setSupported(micSupported()), []);
-
-  const start = useCallback(() => {
-    if (!micSupported() || !enabledRef.current || wanted.current) return;
-    wanted.current = true;
-    setError(null);
-    setListening(true);
-    const press = { interim: "" } as Press;
-    press.transcriber = new LiveTranscriber({
-      onStatus: (status, detail) => {
-        if (status !== "error") return;
-        setError(detail ?? "Voice input stopped.");
-        if (shown.current === press) {
-          wanted.current = false;
-          shown.current = null;
-          setListening(false);
-          setInterim("");
-        }
-      },
-      onInterim: (text) => {
-        press.interim = text;
-        if (shown.current === press) setInterim(text);
-      },
-      onFinal: (text) => {
-        // The committed text replaces the hypothesis, so it can't resurface
-        // as a duplicate "last phrase" on release.
-        press.interim = "";
-        if (shown.current === press) setInterim("");
-        const phrase = text.trim();
-        if (phrase) finalRef.current(phrase);
-      },
-      onLevel: () => {},
-    });
-    press.started = press.transcriber.start({ mode: "SMART", languages: [] });
-    shown.current = press;
-  }, []);
+  useEffect(() => setSupported(!!recognitionCtor()), []);
 
   const stop = useCallback(() => {
     if (!wanted.current) return;
     wanted.current = false;
+    // stop(), not abort(): the recognizer still delivers what it heard.
+    recognition.current?.stop();
     setListening(false);
-    const press = shown.current;
-    if (!press) return;
-    void (async () => {
-      // A quick tap can release before the mic is even live; let the start
-      // settle, then finish, which waits for Gemini's last words.
-      if (await press.started) await press.transcriber.finish();
-      // Released mid-phrase: send what was heard rather than dropping it.
-      const tail = press.interim.trim();
-      if (tail) finalRef.current(tail);
-      if (shown.current === press) {
-        shown.current = null;
+  }, []);
+
+  const start = useCallback(() => {
+    const Ctor = recognitionCtor();
+    if (!Ctor || !enabledRef.current || wanted.current) return;
+    wanted.current = true;
+    setError(null);
+    if (!recognition.current) {
+      const rec = new Ctor();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-US";
+      rec.onresult = (event) => {
+        let interimText = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          const text = result[0].transcript.trim();
+          if (!text) continue;
+          if (result.isFinal) finalRef.current(text);
+          else interimText += `${text} `;
+        }
+        pending.current = interimText.trim();
+        setInterim(pending.current);
+      };
+      rec.onerror = (event) => {
+        // "no-speech" and "aborted" are routine; the onend restart covers them.
+        if (event.error === "no-speech" || event.error === "aborted") return;
+        wanted.current = false;
+        setListening(false);
+        setError(
+          event.error === "not-allowed" || event.error === "service-not-allowed"
+            ? "Microphone access was blocked."
+            : `Voice input stopped (${event.error}).`,
+        );
+      };
+      rec.onend = () => {
+        // Released mid-phrase: send what was heard rather than dropping it.
+        if (pending.current) finalRef.current(pending.current);
+        pending.current = "";
         setInterim("");
-      }
-    })();
+        if (wanted.current) {
+          try {
+            rec.start();
+          } catch {
+            // Already restarting.
+          }
+        } else setListening(false);
+      };
+      recognition.current = rec;
+    }
+    setListening(true);
+    try {
+      recognition.current.start();
+    } catch {
+      // Still winding down from the last release; onend restarts it.
+    }
   }, []);
 
   const prime = useCallback(() => {
-    if (!micSupported()) return;
+    if (!recognitionCtor() || !navigator.mediaDevices?.getUserMedia) return;
     navigator.mediaDevices
       .getUserMedia({ audio: true })
       .then((stream) => stream.getTracks().forEach((track) => track.stop()))

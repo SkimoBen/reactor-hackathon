@@ -5,12 +5,12 @@
 // the agents did about it — the Director's observations and the moves it sent
 // the world, the Concierge's answers. A shop page the Concierge is holding
 // until the video catches up shows as a "waiting" strip with a cancel. It
-// collapses to its header. The gear
-// opens the debug panel: every agent call's inputs, and the agents' settings.
+// collapses to its header. Clear wipes the transcript and what the agents
+// remember (the world keeps running); the gear opens the debug panel: every agent call's inputs, and the agents' settings.
 // When the Concierge opens a shop (`overlay`), its window docks below in the
 // same column and the transcript shrinks to make room.
 //
-// Where voice isn't available (no microphone API), a text field stands in so
+// Where voice isn't available (Firefox), a text field stands in for the mic so
 // the Concierge can still be reached.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -27,6 +27,7 @@ export function AgentPanel({
   pending,
   onCancelPending,
   onSay,
+  onClear,
   overlay,
 }: {
   events: AgentEvent[];
@@ -36,6 +37,7 @@ export function AgentPanel({
   pending: { title: string; condition: string } | null;
   onCancelPending: () => void;
   onSay: (text: string) => void;
+  onClear: () => void;
   /** The Concierge's shop window, docked under the transcript while open. */
   overlay?: ReactNode;
 }) {
@@ -85,6 +87,13 @@ export function AgentPanel({
           </button>
           <div className="flex items-center gap-2">
             {busy && <Spinner />}
+            <button
+              onClick={onClear}
+              title="Clear the transcript and the agents' memory"
+              className="flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium text-muted-foreground transition hover:bg-black/[0.05] hover:text-foreground"
+            >
+              Clear
+            </button>
             <button
               onClick={() => setDebugOpen((value) => !value)}
               aria-pressed={debugOpen}

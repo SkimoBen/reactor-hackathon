@@ -28,6 +28,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { START_SCENE } from "@/lib/agent/config";
 import { walkPlace } from "@/lib/walk/location";
 import {
+  clearEvents,
   describeEvent,
   logEvent,
   recentEvents,
@@ -35,7 +36,7 @@ import {
   type AgentEvent,
 } from "@/lib/agent/events";
 import { captureFrame } from "@/lib/agent/screenshot";
-import { logCall } from "@/lib/agent/debug";
+import { clearCalls, logCall } from "@/lib/agent/debug";
 import {
   conciergeOverrides,
   directorOverrides,
@@ -75,6 +76,8 @@ export interface AgentRuntime {
   ) => void;
   /** Hand the Concierge something the user said. */
   say: (text: string) => void;
+  /** Wipe the transcript, debug calls and the agents' memory; the world keeps running. */
+  clear: () => void;
 }
 
 export function useAgentRuntime(session: WorldSession): AgentRuntime {
@@ -95,6 +98,10 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
   // and rebuilt on every snapshot.
   const latest = useRef({ client });
   latest.current = { client };
+
+  // Bumped by clear(), so a call still in flight when the user clears doesn't
+  // land its result in the fresh transcript.
+  const epoch = useRef(0);
 
   const context = useCallback(() => {
     const { client } = latest.current;
@@ -124,6 +131,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
       const screenshot = captureFrame(getSettings().screenshotWidth);
       if (!screenshot) return;
       directorBusy.current = true;
+      const started = epoch.current;
       try {
         const result = await traced<DirectorOutput>(
           "director",
@@ -135,6 +143,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
             settings: directorOverrides(),
           },
         );
+        if (epoch.current !== started) return;
         logEvent({
           kind: "director",
           observation: result.observation,
@@ -150,6 +159,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
           await client.instruct(result.instruction, { source: "director" });
         }
       } catch (cause) {
+        if (epoch.current !== started) return;
         logEvent({ kind: "error", source: "director", text: message(cause) });
       } finally {
         directorBusy.current = false;
@@ -198,6 +208,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
       setError(null);
       setConciergeBusy(true);
       logEvent({ kind: "user_say", text });
+      const started = epoch.current;
       try {
         const result = await traced<ConciergeOutput>(
           "concierge",
@@ -211,6 +222,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
             settings: conciergeOverrides(),
           },
         );
+        if (epoch.current !== started) return;
         logEvent({ kind: "concierge", summary: result.reasoning });
         const { client } = latest.current;
         if (
@@ -254,11 +266,12 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
           } else openOverlay(target);
         }
       } catch (cause) {
+        if (epoch.current !== started) return;
         const text = message(cause);
         setError(text);
         logEvent({ kind: "error", source: "concierge", text });
       } finally {
-        setConciergeBusy(false);
+        if (epoch.current === started) setConciergeBusy(false);
       }
     },
     [context, cancelPending, openOverlay, setPending],
@@ -321,6 +334,18 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
     });
   }, []);
 
+  const clear = useCallback(() => {
+    epoch.current += 1;
+    lastInstruction.current = null;
+    lastOverlay.current = null;
+    setPending(null);
+    setOverlay(null);
+    setError(null);
+    setConciergeBusy(false);
+    clearEvents();
+    clearCalls();
+  }, [setPending]);
+
   return {
     events,
     busy: conciergeBusy,
@@ -334,6 +359,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
     openOverlay,
     holdOverlay,
     say: useCallback((text: string) => void say(text), [say]),
+    clear,
   };
 }
 

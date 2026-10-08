@@ -6,17 +6,31 @@
 
 import type { Store } from "./types";
 
-/** What to explore, if the utterance asks to explore something. */
+// Filler before the verb: "let's", "I'm", "can we", "okay so"…
+const LEAD = String.raw`(?:(?:let'?s|lets|let\s+us|let\s+me|lemme|i|i'?m|i\s+am|we|we'?re|we\s+are|i'?d\s+like\s+to|we'?d\s+like\s+to|i\s+want\s+to|want\s+to|i\s+wanna|wanna|i\s+need\s+to|need\s+to|i'?ll|i\s+will|we'?ll|gonna|going\s+to|can\s+we|could\s+we|can\s+i|could\s+i|we\s+should|should\s+we|please|go|ok(?:ay)?|alright|now|and|then|so|time\s+to)[\s,]+)*`;
+// "explore X", or the ways people actually say it: "going to X", "head into
+// X", "pop into X", "visit X", "check out X", "stop by X".
+const VERB = String.raw`(explore|(?:go|going|goes|head|heading|walk|walking|step|stepping|pop|popping|duck|ducking|swing|swinging)\s+(?:in(?:to|side)?|to|over\s+to)|enter|entering|visit|visiting|check(?:ing)?\s+out|stop(?:ping)?\s+(?:by|at|in(?:to)?))`;
+const EXPLORE = new RegExp(String.raw`^\s*${LEAD}${VERB}\s+(.+?)[\s.!?]*$`, "i");
+
+// Only "explore" is unambiguous. "Going to buy a shirt" is a plan, not a
+// place, and "head to 27th Street" is a walking direction.
+const NOT_A_PLACE =
+  /^(?:buy|get|order|grab|eat|have|try|see|look|find|pick|make|take|turn|go|walk|head|cross|keep|stop|sit|pay|book|do|be|leave|exit|left|right|back|out|outside|home|the\s+(?:left|right|corner|end))\b/i;
+const STREETLIKE =
+  /\b(?:street|st|avenue|ave|broadway|corner|intersection|block|crosswalk|sidewalk|left|right|north|south|east|west)\.?$/i;
+
+/** What to explore, if the utterance asks to go into somewhere. */
 export function parseExplore(utterance: string): string | null {
-  const match =
-    /^\s*(?:(?:let'?s|lets|let us|i want to|i'd like to|can we|could we|we should|please|go|and|ok(?:ay)?|now)[\s,]+)*explore\s+(.+?)[\s.!?]*$/i.exec(
-      utterance,
-    );
+  const match = EXPLORE.exec(utterance);
   if (!match) return null;
-  const target = match[1]
+  const target = match[2]
     .replace(/^(?:inside|into|in)\s+/i, "")
     .replace(/\s+(?:please|now)$/i, "")
     .trim();
+  const explicit = /^explore$/i.test(match[1]);
+  if (!explicit && (NOT_A_PLACE.test(target) || STREETLIKE.test(target)))
+    return null;
   return target.length >= 2 && target.length <= 80 ? target : null;
 }
 

@@ -95,12 +95,6 @@ export function AgentOverlay({
         {target.url}
       </div>
 
-      {target.note && (
-        <p className="px-0.5 text-[12px] leading-snug text-muted-foreground">
-          {target.note}
-        </p>
-      )}
-
       {target.embeddable ? (
         <iframe
           src={target.url}
