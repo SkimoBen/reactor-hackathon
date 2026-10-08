@@ -263,7 +263,7 @@ function LiveClientBridge({ children }: { children: ReactNode }) {
         // frame capture without threading a ref through the SDK component.
         <HappyOysterVideo
           data-ho-video=""
-          className="absolute inset-0 h-full w-full object-contain"
+          className="absolute inset-0 h-full w-full object-cover"
         />
       ),
     }),

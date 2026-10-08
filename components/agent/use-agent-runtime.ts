@@ -1,6 +1,8 @@
 "use client";
 
-// The client half of the agents, mounted once inside the live provider.
+// The client half of the agents, run once inside the live provider. A hook
+// rather than a component so the shell decides where its pieces render: the
+// transcript panel sits inside the stage, the overlay above everything.
 //
 //   Director  — on a timer while a Directing travel is live: grab a frame,
 //               ask /api/agent/director, send any instruction it returns
@@ -8,6 +10,8 @@
 //   Concierge — on demand, when the user says something: grab a frame, ask
 //               /api/agent/concierge, open the overlay it points at and send
 //               its optional scene instruction (source "concierge").
+//
+// The Director is always on — it's preset, not a user control.
 //
 // Both read the same event log (lib/agent/events.ts), which ho-client.tsx
 // feeds with every instruction and transport call, so each agent sees what
@@ -24,18 +28,28 @@ import {
   logEvent,
   recentEvents,
   useAgentEvents,
+  type AgentEvent,
 } from "@/lib/agent/events";
 import { captureFrame } from "@/lib/agent/screenshot";
 import type { DirectorOutput } from "@/lib/agent/director";
 import type { ConciergeOutput } from "@/lib/agent/concierge";
 import type { WorldSession } from "@/components/happy-oyster/use-world-session";
-import { AgentConsole } from "./AgentConsole";
-import { AgentOverlay, type OverlayTarget } from "./AgentOverlay";
+import type { OverlayTarget } from "./AgentOverlay";
 
-export function AgentRuntime({ session }: { session: WorldSession }) {
+export interface AgentRuntime {
+  events: AgentEvent[];
+  /** The Concierge is working on something the user said. */
+  busy: boolean;
+  error: string | null;
+  overlay: OverlayTarget | null;
+  closeOverlay: () => void;
+  /** Hand the Concierge something the user said. */
+  say: (text: string) => void;
+}
+
+export function useAgentRuntime(session: WorldSession): AgentRuntime {
   const { client } = session;
   const events = useAgentEvents();
-  const [directorEnabled, setDirectorEnabled] = useState(true);
   const [conciergeBusy, setConciergeBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<OverlayTarget | null>(null);
@@ -64,7 +78,7 @@ export function AgentRuntime({ session }: { session: WorldSession }) {
   const directorBusy = useRef(false);
   const lastInstruction = useRef<string | null>(null);
   useEffect(() => {
-    if (!live || !directing || !directorEnabled) return;
+    if (!live || !directing) return;
     const tick = async () => {
       if (directorBusy.current) return;
       const screenshot = captureFrame();
@@ -97,7 +111,7 @@ export function AgentRuntime({ session }: { session: WorldSession }) {
     };
     const id = setInterval(() => void tick(), DIRECTOR_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [live, directing, directorEnabled, context]);
+  }, [live, directing, context]);
 
   // ── Concierge ──────────────────────────────────────────────────────────────
   const say = useCallback(
@@ -152,20 +166,14 @@ export function AgentRuntime({ session }: { session: WorldSession }) {
 
   const closeOverlay = useCallback(() => setOverlay(null), []);
 
-  return (
-    <>
-      <AgentConsole
-        events={events}
-        busy={conciergeBusy}
-        error={error}
-        streaming={live && directing}
-        directorEnabled={directorEnabled}
-        onToggleDirector={() => setDirectorEnabled((value) => !value)}
-        onSay={(text) => void say(text)}
-      />
-      {overlay && <AgentOverlay target={overlay} onClose={closeOverlay} />}
-    </>
-  );
+  return {
+    events,
+    busy: conciergeBusy,
+    error,
+    overlay,
+    closeOverlay,
+    say: useCallback((text: string) => void say(text), [say]),
+  };
 }
 
 async function post<T>(url: string, body: unknown): Promise<T> {

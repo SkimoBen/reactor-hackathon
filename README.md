@@ -5,20 +5,18 @@ World models hackathon!
 
 # HappyOyster
 
-A Next.js + TypeScript reference frontend for **HappyOyster**, a real-time interactive world model on Reactor. Build a world from a prompt (or attach one you built before), then travel it live: **Adventure** worlds you drive like a game with WASD, **Directing** worlds you steer with text instructions and pause / rewind transport.
+A Next.js + TypeScript frontend for **HappyOyster**, a real-time interactive world model on Reactor. One button builds a preset Directing world of New York and drops you into it live; you talk, an agent watches the stream and steers the world, and a transcript panel shows both.
 
 ```
-┌─────────────────────────┬────────────────────────────────────┐
-│  Connection             │                                    │
-│  System prompt          │                                    │
-│  Create a world         │          live world video          │
-│  Return to a world      │                                    │
-│  ── while traveling ──  │                                    │
-│  0:42 countdown         │                                    │
-│  WASD · look · verbs    │                                    │
-│  (Directing: instruct,  │                                    │
-│   pause, rewind)        │                                    │
-└─────────────────────────┴────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                                          ┌─────────────────┐ │
+│                                          │ ^ Transcript  🎙 │ │
+│     blurred splash  →  live world video  │ You: …          │ │
+│                                          │ Director: → …   │ │
+│                                          └─────────────────┘ │
+│                                                              │
+│                     [ Explore New York ]                     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 Everything model-specific runs through the typed
@@ -39,20 +37,19 @@ pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), describe a world (or paste the id of one you built before), and the app connects a Reactor session, builds (or attaches) the world, and drops you into the live travel.
+Open [http://localhost:3000](http://localhost:3000) and press **Explore New York**: the app connects a Reactor session, builds the preset world, and drops you into the live travel.
 
 The API key never reaches the browser: the server route [`app/api/reactor/token/route.ts`](app/api/reactor/token/route.ts) exchanges it for a short-lived JWT (see [docs.reactor.inc/authentication](https://docs.reactor.inc/authentication)), and the SDK re-fetches it (through the browser's HTTP cache) on every Reactor Platform call via the `getJwt` resolver.
 
 ## What you can do with it
 
-- **Compose your own.** Free-text prompt, an Adventure/Directing mode toggle, an optional first-frame image upload (≤2MB), and the knobs that apply to the chosen mode: perspective for Adventure; resolution, camera motion, and narrative for Directing.
-- **Attach by id.** Worlds are permanent; paste an `encrypted_world_id` you saved earlier (and pick its experience) to jump straight back in, no build.
-- **Drive Adventure worlds.** WASD moves, arrows (or the on-screen pad) look, chords compose (W+A strafes, Shift+W sprints), and the world's advertised action verbs appear as buttons.
-- **Steer Directing worlds.** Type instructions to steer the next scene, pause / resume, and rewind (multiples of 4s, while paused). The instruction timeline and auto-detected chapters render live.
+- **One preset world.** The prompt, first frame and every creation knob live in [`lib/agent/config.ts`](lib/agent/config.ts) (`START_SCENE`); the UI exposes none of them.
+- **Talk to it.** Pressing Explore turns on browser speech recognition (Chrome / Safari); each phrase goes to the Concierge agent, which can open a real shop's page or steer the scene. Browsers without it get a text field in the panel.
+- **Watch the Director.** While the travel is live, the Director agent looks at a frame every few seconds and sends the world instructions; its observations and moves appear in the transcript.
 
 ## How it works
 
-Each experience is its own Reactor model — `happy-oyster-adventure` and `happy-oyster-director` — so the **mode is chosen before connecting** and fixed for the life of the session. The composer picks the mode; [`HappyOysterApp`](app/HappyOysterApp.tsx) mounts the provider on it, and switching experiences remounts a fresh session.
+Each experience is its own Reactor model — `happy-oyster-adventure` and `happy-oyster-director` — so the **mode is chosen before connecting** and fixed for the life of the session. This app always uses Directing; [`HappyOysterApp`](app/HappyOysterApp.tsx) mounts the provider on it.
 
 From there the flow is the typed SDK's linear lifecycle:
 
@@ -81,15 +78,13 @@ If `REACTOR_API_KEY` is missing, the app renders a friendly setup landing instea
 | File                                                                                                                                  | What's in it                                                                                                                                                                                        |
 | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`app/page.tsx`](app/page.tsx)                                                                                                        | Server Component gate: live app or the setup landing.                                                                                                                                               |
-| [`app/HappyOysterApp.tsx`](app/HappyOysterApp.tsx)                                                                                    | The fixed shell: header on top, control sidebar beside the content screen. Owns the pending intent and its mode; mounts the client provider keyed on the mode.                                      |
+| [`app/HappyOysterApp.tsx`](app/HappyOysterApp.tsx)                                                                                    | The shell: one stage with the transcript panel in it. Owns the pending intent, starts the preset world and the mic on Explore.                                                                      |
 | [`components/happy-oyster/ho-client.tsx`](components/happy-oyster/ho-client.tsx)                                                      | The `useHappyOysterClient()` surface adapting the live SDK. Start here.                                                                                                                             |
 | [`components/happy-oyster/use-world-session.ts`](components/happy-oyster/use-world-session.ts)                                        | The session driver: walks a `WorldIntent` through connect → create/attach → auto-travel, phase-driven and StrictMode-safe.                                                                          |
 | [`lib/view.ts`](lib/view.ts)                                                                                                          | The app's one reducer: SDK snapshot in, `AppView` out — plus the four-step loading journey the screen traces live.                                                                                  |
-| [`components/happy-oyster/Sidebar.tsx`](components/happy-oyster/Sidebar.tsx)                                                          | The control rail, topped by the `StatusBadge` connection panel: browse surfaces, then the build card, ready card, travel deck (countdown + mode-matched controls), or error card as the view moves. |
-| [`components/happy-oyster/Screen.tsx`](components/happy-oyster/Screen.tsx)                                                            | The content screen the travel video plays in: the journey pane while loading, then the live stream, then the end scene with the world id.                                                           |
-| [`components/happy-oyster/Composer.tsx`](components/happy-oyster/Composer.tsx)                                                        | The browse surfaces: custom compose (prompt, mode toggle, ≤2MB first-frame upload) and attach-by-id.                                                                                                |
-| [`components/happy-oyster/AdventureControls.tsx`](components/happy-oyster/AdventureControls.tsx)                                      | WASD + arrows + chords → `hold` / `interact` / `release`; world-advertised verbs.                                                                                                                   |
-| [`components/happy-oyster/DirectingControls.tsx`](components/happy-oyster/DirectingControls.tsx)                                      | Text `instruct`, pause / resume / rewind transport, the instruction + chapter timeline.                                                                                                             |
+| [`components/happy-oyster/Stage.tsx`](components/happy-oyster/Stage.tsx)                                                              | The stage: blurred splash before the world is up, the live stream while traveling, and the bottom dock (Explore / loading / countdown + End / Explore again / Try again).                         |
+| [`components/agent/AgentPanel.tsx`](components/agent/AgentPanel.tsx)                                                                  | The collapsible transcript panel: what you said (live, via [`use-speech.ts`](components/agent/use-speech.ts)) and what the agents did.                                                            |
+| [`components/agent/use-agent-runtime.ts`](components/agent/use-agent-runtime.ts)                                                      | The Director loop and the Concierge call, feeding the shared event log ([`lib/agent/events.ts`](lib/agent/events.ts)).                                                                             |
 | [`app/api/reactor/token/route.ts`](app/api/reactor/token/route.ts)                                                                    | Cacheable GET route that exchanges `REACTOR_API_KEY` for a short-lived JWT.                                                                                                                         |
 | [`lib/worlds.ts`](lib/worlds.ts)                                                                                                      | The countdown lengths and the `WorldIntent` type.                                                                                                                                                   |
 | [`skill/SKILL.md`](skill/SKILL.md)                                                                                                    | The extension guide: the client surface, the lifecycle, the input models, auth, and every gotcha.                                                                                                   |
