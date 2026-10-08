@@ -5,33 +5,30 @@ import {
   ClipDownloadButton,
   ClipPlayer,
   RecordingError,
-  useReactor,
+  normalizeJwtSource,
   type Clip,
+  type JwtResolver,
 } from "@reactor-team/js-sdk";
+import { useHappyOyster } from "@reactor-models/happy-oyster/react";
 import { Button } from "@/components/ui/button";
 import { SectionLabel } from "./ui";
 
-// Model-agnostic "Snap clip" panel.
+// "Snap clip" panel.
 //
 // Captures the last `durationSeconds` of the live travel and pops a modal
-// with the SDK's built-in <ClipPlayer> preview and a download button. It
-// does not depend on the typed model package at all, only on
-// @reactor-team/js-sdk.
+// with the SDK's built-in <ClipPlayer> preview and a download button.
 //
-// Recording is a base-SDK feature: it works the same way for every model
-// with recording enabled, and the typed model packages
+// Recording is a base-SDK feature, and the typed model packages
 // (@reactor-models/happy-oyster, …) do not re-export the recording
-// surface. So this is the one place in the example apps where importing
-// directly from @reactor-team/js-sdk is idiomatic, not a smell.
+// surface, so the clip components come straight from @reactor-team/js-sdk.
 //
-// `<ClipPlayer>` and `<ClipDownloadButton>` auto-inherit the JWT resolver
-// from `<HappyOysterProvider>` via React context, so no `getJwt` prop is
-// needed here. The one case where you would still pass it explicitly is
-// when the clip UI renders through a portal outside the provider subtree
-// (e.g. a toast living in `app/layout.tsx`) — capture the resolver with
-// `reactor.getJwtResolver()` at action time and thread it down.
+// <HappyOysterProvider> does not mount the SDK's <ReactorProvider>, so
+// `useReactor()` has no store here. Instead we drive recording through the
+// model itself — HappyOysterModel extends `Reactor`, so it has
+// `requestClip()` and `getJwtResolver()` — and thread the resolver into
+// <ClipPlayer> / <ClipDownloadButton> explicitly.
 //
-// The panel gates itself on `status`, so it can sit in the rail
+// The panel gates itself on `streaming`, so it can sit in the rail
 // unconditionally: it appears once a travel is streaming and disappears
 // when the session ends. Clip URLs are short-lived (a few minutes) — the
 // downloaded MP4 is the artifact, not the URL.
@@ -40,24 +37,28 @@ export interface SnapClipProps {
   durationSeconds?: number;
 }
 
-export function SnapClip({ durationSeconds = 10 }: SnapClipProps) {
-  const { status, requestClip } = useReactor((s) => ({
-    status: s.status,
-    requestClip: s.requestClip,
-  }));
+interface Snap {
+  clip: Clip;
+  getJwt?: JwtResolver;
+}
 
-  const [clip, setClip] = useState<Clip | null>(null);
+export function SnapClip({ durationSeconds = 10 }: SnapClipProps) {
+  const { model, streaming } = useHappyOyster();
+
+  const [snapped, setSnapped] = useState<Snap | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (status !== "ready") return null;
+  if (!streaming) return null;
 
   async function snap() {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      setClip(await requestClip(durationSeconds));
+      const clip = await model.requestClip(durationSeconds);
+      const jwt = model.getJwtResolver();
+      setSnapped({ clip, getJwt: jwt ? normalizeJwtSource(jwt) : undefined });
     } catch (cause) {
       setError(
         cause instanceof RecordingError
@@ -82,10 +83,11 @@ export function SnapClip({ durationSeconds = 10 }: SnapClipProps) {
           {error}
         </p>
       )}
-      {clip && (
+      {snapped && (
         <ClipModal
-          clip={clip}
-          onClose={() => setClip(null)}
+          clip={snapped.clip}
+          getJwt={snapped.getJwt}
+          onClose={() => setSnapped(null)}
           onError={(cause) => setError(cause.message)}
           onDownloaded={() => setError(null)}
         />
@@ -96,11 +98,13 @@ export function SnapClip({ durationSeconds = 10 }: SnapClipProps) {
 
 function ClipModal({
   clip,
+  getJwt,
   onClose,
   onError,
   onDownloaded,
 }: {
   clip: Clip;
+  getJwt?: JwtResolver;
   onClose: () => void;
   onError: (error: Error) => void;
   onDownloaded: () => void;
@@ -123,6 +127,7 @@ function ClipModal({
 
         <ClipPlayer
           clip={clip}
+          getJwt={getJwt}
           onError={onError}
           className="w-full overflow-hidden rounded-md border border-white/[0.06]"
         />
@@ -130,6 +135,7 @@ function ClipModal({
         <div className="flex justify-end">
           <ClipDownloadButton
             clip={clip}
+            getJwt={getJwt}
             filename={`happy-oyster-clip-${Math.floor(Date.now() / 1000)}.mp4`}
             onSuccess={onDownloaded}
             onError={onError}
