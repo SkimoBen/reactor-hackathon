@@ -11,7 +11,10 @@ class PcmRecorder extends AudioWorkletProcessor {
     super();
     const targetRate = options.processorOptions?.targetRate ?? 16000;
     this.ratio = sampleRate / targetRate;
-    this.chunk = new Int16Array(Math.round(targetRate / 10));
+    // Kept separately because posting a chunk transfers its buffer, which
+    // detaches it: afterwards `this.chunk.length` reads 0.
+    this.size = Math.round(targetRate / 10);
+    this.chunk = new Int16Array(this.size);
     this.length = 0;
     this.sum = 0;
     this.count = 0;
@@ -38,12 +41,12 @@ class PcmRecorder extends AudioWorkletProcessor {
       this.count = 0;
       this.energy += value * value;
       this.chunk[this.length++] = value < 0 ? value * 0x8000 : value * 0x7fff;
-      if (this.length === this.chunk.length) {
+      if (this.length === this.size) {
         const level = Math.sqrt(this.energy / this.length);
         this.port.postMessage({ pcm: this.chunk.buffer, level }, [
           this.chunk.buffer,
         ]);
-        this.chunk = new Int16Array(this.chunk.length);
+        this.chunk = new Int16Array(this.size);
         this.length = 0;
         this.energy = 0;
       }
