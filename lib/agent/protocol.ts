@@ -128,3 +128,20 @@ export function readRecentInstruction(value: unknown): RecentInstruction | null 
   if (!source || !content || secondsAgo === undefined) return null;
   return { source, text: content, secondsAgo };
 }
+
+/** An overlay the Concierge has found but is holding until the scene shows
+ * the moment it belongs to (the character at the till, say). */
+export interface PendingOverlay {
+  title: string;
+  condition: string;
+  secondsWaiting: number;
+}
+
+export function readPendingOverlay(value: unknown): PendingOverlay | null {
+  const raw = record(value);
+  const title = text(raw.title, 500);
+  const condition = text(raw.condition, 1000);
+  const secondsWaiting = seconds(raw.secondsWaiting);
+  if (!title || !condition || secondsWaiting === undefined) return null;
+  return { title, condition, secondsWaiting };
+}

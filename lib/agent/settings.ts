@@ -11,6 +11,8 @@
 
 import { useSyncExternalStore } from "react";
 import {
+  CONCIERGE_WAIT_INTERVAL_MS,
+  CONCIERGE_WAIT_TIMEOUT_MS,
   DIRECTOR_COOLDOWN_MS,
   DIRECTOR_INTERVAL_MS,
   EVENT_WINDOW,
@@ -49,6 +51,10 @@ export interface AgentSettings {
     webSearch: boolean;
     searchContextSize: SearchContextSize;
     imageDetail: ImageDetail;
+    /** How often a held overlay checks the frame for its moment. */
+    waitIntervalMs: number;
+    /** Open a held overlay anyway after this long. */
+    waitTimeoutMs: number;
   };
   /** Width of the JPEG frame sent to both agents. */
   screenshotWidth: number;
@@ -78,6 +84,8 @@ export const DEFAULT_SETTINGS: AgentSettings = {
     webSearch: true,
     searchContextSize: "medium",
     imageDetail: "low",
+    waitIntervalMs: CONCIERGE_WAIT_INTERVAL_MS,
+    waitTimeoutMs: CONCIERGE_WAIT_TIMEOUT_MS,
   },
   screenshotWidth: SCREENSHOT_WIDTH,
   eventWindow: EVENT_WINDOW,

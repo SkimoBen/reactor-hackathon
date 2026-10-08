@@ -2,14 +2,19 @@
 
 // The client half of the agents, run once inside the live provider. A hook
 // rather than a component so the shell decides where its pieces render: the
-// transcript panel sits inside the stage, the overlay above everything.
+// transcript panel sits inside the stage, the overlay docked under it.
 //
 //   Director  — on a timer while a Directing travel is live: grab a frame,
 //               ask /api/agent/director, send any instruction it returns
 //               through the client (logged with source "director").
 //   Concierge — on demand, when the user says something: grab a frame, ask
-//               /api/agent/concierge, open the overlay it points at and send
-//               its optional scene instruction (source "concierge").
+//               /api/agent/concierge, send its optional scene instruction
+//               (source "concierge") and open the overlay it points at.
+//   Watcher   — the world model renders that instruction seconds later, so
+//               when the Concierge names a moment to wait for (open_when:
+//               "he's at the till") the overlay is held and a frame goes to
+//               /api/agent/watch every few seconds until it shows that
+//               moment, or the wait times out and it opens anyway.
 //
 // The Director is on unless the debug panel's Settings tab turns it off;
 // both agents read their model, prompt and other knobs from lib/agent/
@@ -36,9 +41,14 @@ import {
   getSettings,
   useAgentSettings,
 } from "@/lib/agent/settings";
-import type { AgentTrace, LastOverlay } from "@/lib/agent/protocol";
+import type {
+  AgentTrace,
+  LastOverlay,
+  PendingOverlay,
+} from "@/lib/agent/protocol";
 import type { DirectorOutput } from "@/lib/agent/director";
 import type { ConciergeOutput } from "@/lib/agent/concierge";
+import type { WatcherOutput } from "@/lib/agent/watcher";
 import type { WorldSession } from "@/components/happy-oyster/use-world-session";
 import type { OverlayTarget } from "./AgentOverlay";
 
@@ -49,6 +59,9 @@ export interface AgentRuntime {
   error: string | null;
   overlay: OverlayTarget | null;
   closeOverlay: () => void;
+  /** An overlay found but held until the video shows the moment it's for. */
+  pending: { title: string; condition: string } | null;
+  cancelPending: () => void;
   /** Hand the Concierge something the user said. */
   say: (text: string) => void;
 }
@@ -59,8 +72,10 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
   const [conciergeBusy, setConciergeBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<OverlayTarget | null>(null);
+  const agentSettings = useAgentSettings();
   const { enabled: directorEnabled, intervalMs: directorIntervalMs } =
-    useAgentSettings().director;
+    agentSettings.director;
+  const { waitIntervalMs } = agentSettings.concierge;
 
   const directing = client.worldState?.mode === 2;
   const live = client.streaming && client.travelStatus !== "paused";
@@ -135,6 +150,35 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
   // The last overlay it opened and when the user closed it, so a later
   // utterance at the same counter doesn't pop the shop the user just dismissed.
   const lastOverlay = useRef<OverlayRecord | null>(null);
+  // State for the panel, mirrored in a ref for the timers and in-flight calls.
+  const [pending, setPendingState] = useState<PendingRecord | null>(null);
+  const pendingRef = useRef<PendingRecord | null>(null);
+  const setPending = useCallback((next: PendingRecord | null) => {
+    pendingRef.current = next;
+    setPendingState(next);
+  }, []);
+
+  const openOverlay = useCallback(
+    (target: OverlayTarget) => {
+      setPending(null);
+      setOverlay(target);
+      lastOverlay.current = {
+        title: target.title,
+        url: target.url,
+        openedAt: Date.now(),
+        closedAt: null,
+      };
+      logEvent({ kind: "overlay", title: target.title, url: target.url });
+    },
+    [setPending],
+  );
+
+  const cancelPending = useCallback(() => {
+    const held = pendingRef.current;
+    if (!held) return;
+    setPending(null);
+    logEvent({ kind: "overlay_cancelled", title: held.target.title });
+  }, [setPending]);
 
   const say = useCallback(
     async (text: string) => {
@@ -150,6 +194,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
             screenshot: captureFrame(getSettings().screenshotWidth),
             ...context(),
             lastOverlay: overlayAges(lastOverlay.current),
+            pendingOverlay: pendingAge(pendingRef.current),
             settings: conciergeOverrides(),
           },
         );
@@ -170,22 +215,30 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
               }),
             );
         }
+        if (result.action === "cancel_pending") cancelPending();
         if (result.action === "open_overlay" && result.overlay_url) {
-          const title = result.shop?.name ?? hostOf(result.overlay_url);
-          setOverlay({
-            title,
+          const target: OverlayTarget = {
+            title: result.shop?.name ?? hostOf(result.overlay_url),
             address: result.shop?.address ?? null,
             url: result.overlay_url,
             embeddable: result.embeddable,
             note: plainText(result.reasoning),
-          });
-          lastOverlay.current = {
-            title,
-            url: result.overlay_url,
-            openedAt: Date.now(),
-            closedAt: null,
           };
-          logEvent({ kind: "overlay", title, url: result.overlay_url });
+          // Hold it until the video catches up — unless there's no video to
+          // watch, in which case there's nothing to wait for.
+          if (result.open_when && client.streaming) {
+            setPending({
+              target,
+              condition: result.open_when,
+              utterance: text,
+              since: Date.now(),
+            });
+            logEvent({
+              kind: "overlay_pending",
+              title: target.title,
+              condition: result.open_when,
+            });
+          } else openOverlay(target);
         }
       } catch (cause) {
         const text = message(cause);
@@ -195,8 +248,45 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
         setConciergeBusy(false);
       }
     },
-    [context],
+    [context, cancelPending, openOverlay, setPending],
   );
+
+  // ── Watcher ────────────────────────────────────────────────────────────────
+  const watching = pending !== null && live;
+  useEffect(() => {
+    if (!watching) return;
+    let busy = false;
+    const tick = async () => {
+      const held = pendingRef.current;
+      if (busy || !held) return;
+      const waitedMs = Date.now() - held.since;
+      if (waitedMs >= getSettings().concierge.waitTimeoutMs) {
+        openOverlay(held.target);
+        return;
+      }
+      const screenshot = captureFrame(getSettings().screenshotWidth);
+      if (!screenshot) return;
+      busy = true;
+      try {
+        const result = await traced<WatcherOutput>("watcher", "/api/agent/watch", {
+          screenshot,
+          utterance: held.utterance,
+          condition: held.condition,
+          secondsWaiting: Math.round(waitedMs / 1000),
+          settings: undefined,
+        });
+        // Still the same hold? The user may have cancelled or asked for
+        // something else while the frame was being judged.
+        if (result.met && pendingRef.current === held) openOverlay(held.target);
+      } catch (cause) {
+        logEvent({ kind: "error", source: "concierge", text: message(cause) });
+      } finally {
+        busy = false;
+      }
+    };
+    const id = setInterval(() => void tick(), waitIntervalMs);
+    return () => clearInterval(id);
+  }, [watching, waitIntervalMs, openOverlay]);
 
   const closeOverlay = useCallback(() => {
     setOverlay(null);
@@ -216,6 +306,10 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
     error,
     overlay,
     closeOverlay,
+    pending: pending
+      ? { title: pending.target.title, condition: pending.condition }
+      : null,
+    cancelPending,
     say: useCallback((text: string) => void say(text), [say]),
   };
 }
@@ -224,7 +318,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
 // succeeds or not. The overrides are left out of the record: the trace shows
 // what the server actually used.
 async function traced<T extends { trace: AgentTrace }>(
-  agent: "director" | "concierge",
+  agent: "director" | "concierge" | "watcher",
   url: string,
   body: { screenshot: string | null; settings: unknown } & Record<string, unknown>,
 ): Promise<T> {
@@ -284,6 +378,24 @@ interface OverlayRecord {
   url: string;
   openedAt: number;
   closedAt: number | null;
+}
+
+interface PendingRecord {
+  target: OverlayTarget;
+  /** The on-screen moment to wait for, from the Concierge's open_when. */
+  condition: string;
+  /** What the user said, so the Watcher knows what's being acted out. */
+  utterance: string;
+  since: number;
+}
+
+function pendingAge(held: PendingRecord | null): PendingOverlay | null {
+  if (!held) return null;
+  return {
+    title: held.target.title,
+    condition: held.condition,
+    secondsWaiting: Math.round((Date.now() - held.since) / 1000),
+  };
 }
 
 function overlayAges(last: OverlayRecord | null): LastOverlay | null {

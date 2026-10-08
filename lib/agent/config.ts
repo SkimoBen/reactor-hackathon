@@ -47,6 +47,13 @@ export const DIRECTOR_INTERVAL_MS = 10_000;
  * so the instruction can land before it judges (and steers) again. */
 export const DIRECTOR_COOLDOWN_MS = 15_000;
 
+/** While an overlay waits for the scene to catch up (the world model renders
+ * an instruction seconds after it's sent), how often a frame is checked… */
+export const CONCIERGE_WAIT_INTERVAL_MS = 3_000;
+
+/** …and how long to wait before opening it anyway. */
+export const CONCIERGE_WAIT_TIMEOUT_MS = 60_000;
+
 /** Width of the JPEG frame sent to the agents — small keeps vision cheap. */
 export const SCREENSHOT_WIDTH = 640;
 

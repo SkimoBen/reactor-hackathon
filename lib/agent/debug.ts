@@ -11,7 +11,7 @@ import type { AgentTrace } from "./protocol";
 export interface DebugCall {
   id: number;
   at: number;
-  agent: "director" | "concierge";
+  agent: "director" | "concierge" | "watcher";
   durationMs: number;
   /** The frame sent with the call, as a data URL. */
   screenshot: string | null;

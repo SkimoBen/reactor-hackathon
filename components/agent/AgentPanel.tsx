@@ -3,13 +3,17 @@
 // The frosted panel in the stage's top-right corner: what the user has said
 // (the push-to-talk transcript, with the phrase still forming in grey) and what
 // the agents did about it — the Director's observations and the moves it sent
-// the world, the Concierge's answers. It collapses to its header. The gear
+// the world, the Concierge's answers. A shop page the Concierge is holding
+// until the video catches up shows as a "waiting" strip with a cancel. It
+// collapses to its header. The gear
 // opens the debug panel: every agent call's inputs, and the agents' settings.
+// When the Concierge opens a shop (`overlay`), its window docks below in the
+// same column and the transcript shrinks to make room.
 //
 // Where voice isn't available (Firefox), a text field stands in for the mic so
 // the Concierge can still be reached.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AgentEvent } from "@/lib/agent/events";
 import { Spinner } from "@/components/happy-oyster/ui";
 import type { Speech } from "./use-speech";
@@ -20,13 +24,20 @@ export function AgentPanel({
   speech,
   busy,
   error,
+  pending,
+  onCancelPending,
   onSay,
+  overlay,
 }: {
   events: AgentEvent[];
   speech: Speech;
   busy: boolean;
   error: string | null;
+  pending: { title: string; condition: string } | null;
+  onCancelPending: () => void;
   onSay: (text: string) => void;
+  /** The Concierge's shop window, docked under the transcript while open. */
+  overlay?: ReactNode;
 }) {
   const [open, setOpen] = useState(true);
   const [debugOpen, setDebugOpen] = useState(false);
@@ -37,13 +48,18 @@ export function AgentPanel({
   useEffect(() => {
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [feed.length, speech.interim, open]);
+  }, [feed.length, speech.interim, open, overlay != null]);
 
   const problem = speech.error ?? error;
 
   return (
-    <div className="absolute right-3 top-3 z-20 w-[min(340px,calc(100%-1.5rem))] sm:right-6 sm:top-6">
-      <div className="overflow-hidden rounded-[20px] bg-white/70 shadow-[0_8px_40px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] backdrop-blur-2xl backdrop-saturate-150">
+    // The column stops above the dock so the shop window never covers it.
+    <div
+      className={`pointer-events-none absolute bottom-[5.5rem] right-3 top-3 z-20 flex flex-col gap-3 transition-[width] duration-300 sm:bottom-[7.5rem] sm:right-6 sm:top-6 ${
+        overlay ? "w-[min(400px,calc(100%-1.5rem))]" : "w-[min(340px,calc(100%-1.5rem))]"
+      }`}
+    >
+      <div className="pointer-events-auto flex min-h-0 shrink-0 flex-col overflow-hidden rounded-[20px] bg-white/70 shadow-[0_8px_40px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] backdrop-blur-2xl backdrop-saturate-150">
         <div className="flex items-center justify-between gap-2 px-4 pb-2.5 pt-3">
           <button
             onClick={() => setOpen((value) => !value)}
@@ -97,7 +113,9 @@ export function AgentPanel({
             <div className="mx-4 h-px bg-black/[0.12]" />
             <div
               ref={scroller}
-              className="flex max-h-[min(52vh,440px)] flex-col gap-3 overflow-y-auto px-4 py-3.5"
+              className={`flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3.5 transition-[max-height] duration-300 ${
+                overlay ? "max-h-[min(16vh,120px)]" : "max-h-[min(52vh,440px)]"
+              }`}
             >
               {feed.length === 0 && !speech.interim ? (
                 <p className="text-[13px] leading-[1.45] text-muted-foreground">
@@ -114,6 +132,27 @@ export function AgentPanel({
                 </Line>
               )}
             </div>
+            {pending && (
+              <div className="mx-3 mb-3 flex items-start gap-2.5 rounded-[14px] bg-[#c2410c]/[0.07] px-3 py-2.5">
+                <span className="mt-0.5">
+                  <Spinner />
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="text-[12px] font-semibold text-[#c2410c]">
+                    {pending.title} opens when…
+                  </span>
+                  <span className="text-[12px] leading-snug text-muted-foreground">
+                    {pending.condition}
+                  </span>
+                </div>
+                <button
+                  onClick={onCancelPending}
+                  className="shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium text-muted-foreground transition hover:bg-black/[0.05] hover:text-foreground"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
             {problem && (
               <p className="break-words px-4 pb-3 text-[12px] leading-snug text-destructive">
                 {problem}
@@ -123,7 +162,14 @@ export function AgentPanel({
           </>
         )}
       </div>
-      {debugOpen && <DebugPanel onClose={() => setDebugOpen(false)} />}
+      {overlay && (
+        <div className="pointer-events-auto min-h-[220px] flex-1">{overlay}</div>
+      )}
+      {debugOpen && (
+        <div className="pointer-events-auto">
+          <DebugPanel onClose={() => setDebugOpen(false)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -249,6 +295,20 @@ function Row({ event }: { event: AgentEvent }) {
       return (
         <Line label="Concierge" tone="text-[#c2410c]">
           Opened {event.title}
+        </Line>
+      );
+    case "overlay_pending":
+      return (
+        <Line label="Concierge" tone="text-[#c2410c]">
+          <span className="text-muted-foreground">
+            Found {event.title} — opening it once the scene gets there.
+          </span>
+        </Line>
+      );
+    case "overlay_cancelled":
+      return (
+        <Line label="Concierge" tone="text-[#c2410c]">
+          <span className="text-muted-foreground">Called off {event.title}</span>
         </Line>
       );
     case "overlay_closed":

@@ -1,14 +1,13 @@
 "use client";
 
-// The Concierge's popover: the real shop's ordering page in an <iframe> over
-// the world. Most ordering sites refuse to be framed, and the server already
-// probed for that (lib/agent/concierge.ts checkEmbeddable), so a blocked site
-// gets a card with the shop's details and a new-tab button instead of a
-// silently blank frame.
+// The Concierge's popover: the real shop's ordering page in a small <iframe>
+// window docked under the transcript panel, so the world stays in view beside
+// it. Most ordering sites refuse to be framed, and the server already probed
+// for that (lib/agent/concierge.ts checkEmbeddable), so a blocked site gets a
+// card with the shop's details and a new-tab button instead of a silently
+// blank frame. It fills whatever height its parent column leaves it.
 
 import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { SectionLabel } from "@/components/happy-oyster/ui";
 
 export interface OverlayTarget {
   title: string;
@@ -34,75 +33,98 @@ export function AgentOverlay({
   }, [onClose]);
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-md"
-    >
-      <div
-        onClick={(event) => event.stopPropagation()}
-        className="flex max-h-[90dvh] w-full max-w-4xl flex-col gap-4 rounded-[24px] bg-card p-5 shadow-[0_24px_80px_rgba(0,0,0,0.25)] sm:p-6"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-col gap-1">
-            <SectionLabel>Concierge</SectionLabel>
-            <span className="truncate text-[21px] font-semibold tracking-[-0.021em] text-foreground">
-              {target.title}
+    <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden rounded-[20px] bg-white/70 p-3.5 shadow-[0_8px_40px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] backdrop-blur-2xl backdrop-saturate-150">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-col gap-0.5 pl-0.5 pt-0.5">
+          <span className="truncate text-[17px] font-semibold tracking-[-0.015em] text-foreground">
+            {target.title}
+          </span>
+          {target.address && (
+            <span className="truncate text-[12px] text-muted-foreground">
+              {target.address}
             </span>
-            {target.address && (
-              <span className="truncate text-[13px] text-muted-foreground">
-                {target.address}
-              </span>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <a
-              href={target.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-medium text-primary transition hover:bg-primary/[0.08]"
-            >
-              Open in new tab ↗
-            </a>
-            <Button variant="secondary" size="sm" onClick={onClose}>
-              Close
-            </Button>
-          </div>
+          )}
         </div>
-
-        {target.note && (
-          <p className="text-[15px] leading-[1.45] text-muted-foreground">
-            {target.note}
-          </p>
-        )}
-
-        {target.embeddable ? (
-          <iframe
-            src={target.url}
-            title={target.title}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-            referrerPolicy="no-referrer"
-            className="h-[75dvh] w-full rounded-2xl bg-white ring-1 ring-black/[0.06]"
-          />
-        ) : (
-          <div className="flex flex-col items-center gap-4 rounded-2xl bg-muted px-6 py-12 text-center">
-            <p className="max-w-md text-[15px] leading-[1.45] text-muted-foreground">
-              {target.title} doesn&apos;t allow its site to be embedded here, so
-              it opens in its own tab.
-            </p>
-            <a
-              href={target.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="inline-flex h-11 items-center rounded-full bg-primary px-6 text-[15px] font-medium text-primary-foreground transition hover:bg-[#0077ed]"
+        <div className="flex shrink-0 items-center gap-0.5">
+          <a
+            href={target.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            title="Open in new tab"
+            aria-label="Open in new tab"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition hover:bg-black/[0.05] hover:text-foreground"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              aria-hidden
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              Open {target.title} ↗
-            </a>
-            <span className="max-w-full truncate font-mono text-[12px] text-tertiary">
-              {target.url}
-            </span>
-          </div>
-        )}
+              <path d="M6.5 3.5h-3v9h9v-3M9.5 2.5h4v4M13.5 2.5 7.5 8.5" />
+            </svg>
+          </a>
+          <button
+            onClick={onClose}
+            title="Close (Esc)"
+            aria-label="Close"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition hover:bg-black/[0.05] hover:text-foreground"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              aria-hidden
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <path d="M4 4l8 8M12 4l-8 8" />
+            </svg>
+          </button>
+        </div>
       </div>
+
+      <div
+        title={target.url}
+        className="truncate rounded-[10px] bg-white/80 px-3 py-1.5 font-mono text-[12px] text-muted-foreground ring-1 ring-black/[0.08]"
+      >
+        {target.url}
+      </div>
+
+      {target.note && (
+        <p className="px-0.5 text-[12px] leading-snug text-muted-foreground">
+          {target.note}
+        </p>
+      )}
+
+      {target.embeddable ? (
+        <iframe
+          src={target.url}
+          title={target.title}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+          referrerPolicy="no-referrer"
+          className="min-h-0 w-full flex-1 rounded-[14px] bg-white ring-1 ring-black/[0.06]"
+        />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-[14px] bg-black/[0.04] px-5 py-8 text-center">
+          <p className="text-[13px] leading-[1.45] text-muted-foreground">
+            {target.title} doesn&apos;t allow its site to be embedded here, so
+            it opens in its own tab.
+          </p>
+          <a
+            href={target.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex h-9 items-center rounded-full bg-black px-5 text-[13px] font-medium text-white transition hover:bg-[#222]"
+          >
+            Open {target.title} ↗
+          </a>
+        </div>
+      )}
     </div>
   );
 }

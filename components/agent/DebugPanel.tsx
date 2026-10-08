@@ -2,7 +2,7 @@
 
 // The panel behind the transcript's gear: a look inside the agents.
 //
-//   Calls    — every Director and Concierge call, oldest first: the frame
+//   Calls    — every Director, Concierge and Watcher call, oldest first: the frame
 //              that was sent, the exact system prompt and input text the
 //              model saw, the tools it had and the calls it made (searches,
 //              pages opened), its raw output and the decision we acted on.
@@ -31,6 +31,7 @@ type Tab = "calls" | "settings";
 const AGENT_TONE = {
   director: "text-primary",
   concierge: "text-[#c2410c]",
+  watcher: "text-[#a16207]",
 } as const;
 
 export function DebugPanel({ onClose }: { onClose: () => void }) {
@@ -132,7 +133,8 @@ function CallList({ calls }: { calls: DebugCall[] }) {
         <p className="text-[13px] leading-[1.45] text-muted-foreground">
           No agent calls yet. The Director looks at the stream every few
           seconds while a Directing world is live; the Concierge runs when you
-          say something.
+          say something, and the Watcher checks frames while a shop's page waits
+          for the scene to catch up.
         </p>
       ) : (
         calls.map((call) => <CallCard key={call.id} call={call} />)
@@ -449,6 +451,28 @@ function SettingsForm() {
           value={concierge.imageDetail}
           options={["low", "high", "auto"]}
           onChange={(imageDetail) => updateAgentSettings("concierge", { imageDetail })}
+        />
+        <NumberSetting
+          label="Wait check interval"
+          unit="s"
+          value={concierge.waitIntervalMs / 1000}
+          min={1}
+          max={30}
+          step={0.5}
+          onCommit={(seconds) =>
+            updateAgentSettings("concierge", { waitIntervalMs: Math.round(seconds * 1000) })
+          }
+        />
+        <NumberSetting
+          label="Open anyway after"
+          unit="s"
+          value={concierge.waitTimeoutMs / 1000}
+          min={5}
+          max={300}
+          step={5}
+          onCommit={(seconds) =>
+            updateAgentSettings("concierge", { waitTimeoutMs: Math.round(seconds * 1000) })
+          }
         />
         <PromptSetting
           hint="{place} and {address} are filled in on the server."

@@ -7,6 +7,12 @@
 // best ordering URL for the overlay. It can also return one scene instruction
 // so the world plays along ("you step up to the counter").
 //
+// The world model renders that instruction seconds later, so the overlay
+// shouldn't open while the user is still speaking. The Concierge names the
+// on-screen moment it belongs to (open_when: "he's at the till with the blue
+// shirt") and the browser holds the overlay until lib/agent/watcher.ts sees
+// that moment in a frame.
+//
 // The overlay is an <iframe>, and most ordering sites refuse to be framed, so
 // the URL is probed for X-Frame-Options / CSP frame-ancestors here, server
 // side — the browser can't tell a blocked frame from a slow one.
@@ -23,7 +29,12 @@ import {
   webSearchTool,
 } from "./openai";
 import { CONCIERGE_SYSTEM } from "./prompts";
-import type { AgentTrace, ConciergeOverrides, LastOverlay } from "./protocol";
+import type {
+  AgentTrace,
+  ConciergeOverrides,
+  LastOverlay,
+  PendingOverlay,
+} from "./protocol";
 
 export interface ConciergeInput {
   /** JPEG data URL of the current frame, or null when nothing is streaming. */
@@ -35,15 +46,18 @@ export interface ConciergeInput {
   events: string[];
   /** The overlay this Concierge opened last, if any, and how long ago. */
   lastOverlay?: LastOverlay | null;
+  /** An overlay already found and waiting for its moment on screen. */
+  pendingOverlay?: PendingOverlay | null;
   settings?: ConciergeOverrides;
 }
 
 export interface ConciergeDecision {
-  action: "none" | "open_overlay";
+  action: "none" | "open_overlay" | "cancel_pending";
   reasoning: string;
   shop: { name: string; address: string; url: string } | null;
   overlay_url: string | null;
   world_instruction: string | null;
+  open_when: string | null;
 }
 
 export interface ConciergeOutput extends ConciergeDecision {
@@ -55,9 +69,16 @@ export interface ConciergeOutput extends ConciergeDecision {
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["action", "reasoning", "shop", "overlay_url", "world_instruction"],
+  required: [
+    "action",
+    "reasoning",
+    "shop",
+    "overlay_url",
+    "world_instruction",
+    "open_when",
+  ],
   properties: {
-    action: { type: "string", enum: ["none", "open_overlay"] },
+    action: { type: "string", enum: ["none", "open_overlay", "cancel_pending"] },
     reasoning: {
       type: "string",
       description:
@@ -88,6 +109,11 @@ const SCHEMA = {
       description:
         "Optional: one scene direction (≤20 words) so the video plays along, e.g. 'You step up to the counter and the pizzaiolo looks up.'",
     },
+    open_when: {
+      type: ["string", "null"],
+      description:
+        "The moment in the video to wait for before the overlay opens, written so it can be checked in a single frame, e.g. 'the man is at the checkout counter handing over the blue shirt'. null opens it at once — only when the frame already shows that moment, or the user asked to see the page now.",
+    },
   },
 };
 
@@ -103,6 +129,7 @@ export async function runConcierge(input: ConciergeInput): Promise<ConciergeOutp
       ? `Recent log:\n${input.events.join("\n")}`
       : "Recent log: (empty)",
     describeLastOverlay(input.lastOverlay ?? null),
+    describePendingOverlay(input.pendingOverlay ?? null),
     input.screenshot
       ? "Here is the current frame."
       : "No video is streaming right now, so there is no frame; decide from the text alone.",
@@ -153,11 +180,13 @@ export async function runConcierge(input: ConciergeInput): Promise<ConciergeOutp
   );
   const overlayUrl = sanitizeUrl(decision.overlay_url);
   const open = decision.action === "open_overlay" && overlayUrl !== null;
+  const cancel = decision.action === "cancel_pending" && !!input.pendingOverlay;
   return {
     ...decision,
-    action: open ? "open_overlay" : "none",
+    action: open ? "open_overlay" : cancel ? "cancel_pending" : "none",
     overlay_url: open ? overlayUrl : null,
     world_instruction: decision.world_instruction?.trim() || null,
+    open_when: open ? decision.open_when?.trim() || null : null,
     embeddable: open ? await checkEmbeddable(overlayUrl) : false,
     trace,
   };
@@ -178,6 +207,14 @@ function describeLastOverlay(last: LastOverlay | null): string {
   return [
     `Last overlay: ${opened}. ${state}`,
     "Before opening an overlay, compare it with that one. If it would be the same or a similar business (same shop, or same kind of shop for the same need) and it was opened or closed recently (roughly the last few minutes), do NOT open it again unless this utterance explicitly asks for it again (\"open that again\", \"actually, let me order\", \"show me the menu\"). The character still standing at the same counter, or a vague remark about the food, is not a new request — return action \"none\". A clearly different intent or a different kind of business is fine to open.",
+  ].join("\n");
+}
+
+function describePendingOverlay(pending: PendingOverlay | null): string | null {
+  if (!pending) return null;
+  return [
+    `Pending overlay: you already found "${pending.title}" ${ago(pending.secondsWaiting)} and it opens once the video shows: ${pending.condition}`,
+    "Don't search for it again. If the user calls it off (\"never mind\", \"forget it\", \"I don't want it\"), return action \"cancel_pending\". A new intent replaces it.",
   ].join("\n");
 }
 

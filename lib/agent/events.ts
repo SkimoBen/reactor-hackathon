@@ -26,6 +26,8 @@ export type AgentEvent = { id: number; at: number } & (
   | { kind: "concierge"; summary: string }
   | { kind: "overlay"; title: string; url: string }
   | { kind: "overlay_closed"; title: string; openSeconds: number }
+  | { kind: "overlay_pending"; title: string; condition: string }
+  | { kind: "overlay_cancelled"; title: string }
   | { kind: "error"; source: AgentSource; text: string }
 );
 
@@ -97,6 +99,10 @@ export function describeEvent(event: AgentEvent): string {
       return `[${t}] concierge: ${event.summary}`;
     case "overlay":
       return `[${t}] overlay opened: ${event.title} (${event.url})`;
+    case "overlay_pending":
+      return `[${t}] concierge found ${event.title}; waiting to open it until: ${event.condition}`;
+    case "overlay_cancelled":
+      return `[${t}] the pending ${event.title} overlay was called off`;
     case "overlay_closed":
       return `[${t}] user closed the ${event.title} overlay after ${event.openSeconds}s`;
     case "error":

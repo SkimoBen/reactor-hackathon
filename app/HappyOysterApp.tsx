@@ -9,7 +9,8 @@
 //
 // While exploring, the user holds space to talk (use-speech.ts → the
 // Concierge) and the Director watches the stream; the transcript panel in the
-// stage's corner shows both. The intent lives here, above the provider, so the session hook
+// stage's corner shows both, with any shop the Concierge opens docked under
+// it. The intent lives here, above the provider, so the session hook
 // can drive it; nothing connects until Explore is pressed.
 
 import { useCallback, useState } from "react";
@@ -78,12 +79,19 @@ function Shell({
           speech={speech}
           busy={agents.busy}
           error={agents.error}
+          pending={agents.pending}
+          onCancelPending={agents.cancelPending}
           onSay={agents.say}
+          overlay={
+            agents.overlay && (
+              <AgentOverlay
+                target={agents.overlay}
+                onClose={agents.closeOverlay}
+              />
+            )
+          }
         />
       </Stage>
-      {agents.overlay && (
-        <AgentOverlay target={agents.overlay} onClose={agents.closeOverlay} />
-      )}
     </div>
   );
 }
