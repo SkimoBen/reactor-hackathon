@@ -44,31 +44,24 @@ The API key never reaches the browser: the server route [`app/api/reactor/token/
 ## What you can do with it
 
 - **One preset world.** The prompt and first frame live in [`lib/agent/config.ts`](lib/agent/config.ts) (`START_SCENE`). The transcript's gear opens a debug panel whose Settings tab can override the prompt, resolution, layout and narrative, plus the agents' models and system prompts ([`lib/agent/settings.ts`](lib/agent/settings.ts)).
-- **Talk to it.** Pressing Explore turns on browser speech recognition (Chrome / Safari); each phrase goes to the Concierge agent, which can open a real shop's page or steer the scene. Browsers without it get a text field in the panel.
+- **Talk to it.** Hold space (or the panel's mic button) and speak; Gemini 3.5 Transcribe Live transcribes it as you talk, and each phrase goes to the Concierge agent, which can open a real shop's page or steer the scene. Browsers without a microphone API get a text field in the panel.
 - **Watch the Director.** While the travel is live, the Director agent looks at a frame every few seconds and sends the world instructions; its observations and moves appear in the transcript.
 
-## Voice notes (Gemini 3.5 Transcribe Live)
+## Voice (Gemini 3.5 Transcribe Live)
 
-Anywhere you'd type to the model, you can talk instead:
-
-- **Describe a world by voice.** In *Create a world*, press **Describe it by voice**, say what you want, and press **Stop & use**. The note is transcribed live by `gemini-3.5-transcribe-live` and, by default, expanded by Gemini into a paragraph-length world prompt that fits what's left of the prompt cap after the system prompt (short prompts build unstable worlds). It lands in the prompt box for editing; nothing builds until you press **Build world**. With text already in the box, a note revises it ("make it night, add fireflies").
-- **Steer a Directing world by voice.** While traveling, press **Speak an instruction**; when you stop, the transcript goes straight to `instruct()` (logged for the agents like a typed one).
-- **Talk to the agents.** In the Agents console, **Say it out loud** sends the transcript to the Concierge, exactly as if you'd typed it into *Say something*.
+Push-to-talk runs on `gemini-3.5-transcribe-live` in SMART mode, which drops filler words and false starts. Each press opens a transcription session over a single-use ephemeral token, so `GEMINI_API_KEY` never reaches the browser; audio captured while it connects is held, so the first words aren't lost. The phrase being spoken shows in grey in the transcript; each finished phrase goes to the Concierge. On release, Gemini gets the end of the audio and a moment to commit the last words, and a phrase it never commits is sent as-is.
 
 ```
-mic ─▶ AudioWorklet (16 kHz PCM16) ─▶ Gemini Live, ephemeral token ─▶ transcript
-                                                       ├─▶ /api/world-prompt ─▶ composer ─▶ createWorld()
-                                                       ├─▶ instruct()   (Directing travel)
-                                                       └─▶ Concierge    (Agents console)
+hold space ─▶ AudioWorklet (16 kHz PCM16) ─▶ Gemini Live ─▶ interim ─▶ transcript panel
+                                                         └▶ final   ─▶ Concierge
 ```
 
 | File | What's in it |
 | --- | --- |
-| [`lib/transcriber.ts`](lib/transcriber.ts) | Mic capture and the Gemini Live session; `finish()` ends a note and waits for the last words. |
+| [`components/agent/use-speech.ts`](components/agent/use-speech.ts) | Push-to-talk: space / mic button → one transcription session per press. |
+| [`lib/transcriber.ts`](lib/transcriber.ts) | Mic capture and the Gemini Live session; `finish()` ends a press and waits for the last words. |
 | [`public/pcm-recorder-worklet.js`](public/pcm-recorder-worklet.js) | AudioWorklet: native-rate mic → 16 kHz mono PCM16 in 100 ms chunks. |
-| [`components/happy-oyster/VoiceNote.tsx`](components/happy-oyster/VoiceNote.tsx) | The record / stop / live-caption button all three surfaces use (light and dark looks). |
-| [`app/api/gemini/token/route.ts`](app/api/gemini/token/route.ts) | Mints a single-use Gemini Live token locked to the transcription model; the key stays server-side. |
-| [`app/api/world-prompt/route.ts`](app/api/world-prompt/route.ts) | Voice note → mode-aware world prompt. |
+| [`app/api/gemini/token/route.ts`](app/api/gemini/token/route.ts) | Mints a single-use Gemini Live token locked to the transcription model. |
 
 ## How it works
 
@@ -91,7 +84,7 @@ Everything model-specific runs through the typed **`@reactor-models/happy-oyster
 | Env var                        | Required   | What it does                                                                                                                                                     |
 | ------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `REACTOR_API_KEY`              | yes (live) | Server-side key exchanged for session JWTs by `app/api/reactor/token/route.ts`.                                                                                  |
-| `GEMINI_API_KEY`               | voice only | Server-side Gemini key: mints transcription tokens and expands voice notes into world prompts. |
+| `GEMINI_API_KEY`               | voice only | Server-side Gemini key that mints the push-to-talk transcription tokens (`gemini-3.5-transcribe-live`). |
 | `NEXT_PUBLIC_REACTOR_API_URL`  | no         | Reactor API base URL. Defaults to `https://api.reactor.inc`.                                                                                                     |
 | `NEXT_PUBLIC_HO_LOCAL_RUNTIME` | no         | Set to `1` to talk straight to a runtime-served model (adventure on `:8080`, directing on `:8081`), skipping the Reactor Platform: no `REACTOR_API_KEY`, no JWT. |
 

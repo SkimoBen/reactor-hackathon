@@ -10,7 +10,7 @@
 // When the Concierge opens a shop (`overlay`), its window docks below in the
 // same column and the transcript shrinks to make room.
 //
-// Where voice isn't available (Firefox), a text field stands in for the mic so
+// Where voice isn't available (no microphone API), a text field stands in so
 // the Concierge can still be reached.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
