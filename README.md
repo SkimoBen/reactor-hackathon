@@ -63,6 +63,31 @@ hold space ─▶ AudioWorklet (16 kHz PCM16) ─▶ Gemini Live ─▶ interim 
 | [`public/pcm-recorder-worklet.js`](public/pcm-recorder-worklet.js) | AudioWorklet: native-rate mic → 16 kHz mono PCM16 in 100 ms chunks. |
 | [`app/api/gemini/token/route.ts`](app/api/gemini/token/route.ts) | Mints a single-use Gemini Live token locked to the transcription model. |
 
+## Where you are, and what's around you
+
+While you explore, real store names float over the storefronts and a mini-map in the bottom-right corner follows the character around real Manhattan streets.
+
+- **Position, from the video itself.** HappyOyster reports no position, so ~10 times a second the app reads the camera's motion off the live video with a coarse optical flow ([`lib/walk/flow.ts`](lib/walk/flow.ts)): the scene expanding means walking, sliding sideways means turning, neither means standing still. A tracker ([`lib/walk/tracker.ts`](lib/walk/tracker.ts)) snaps that onto the real street grid around Broadway ([`lib/walk/streets.ts`](lib/walk/streets.ts), from OpenStreetMap), like a car's navigation does:
+  - stop, and the cursor stops; walk, and it moves along the block at your pace (default **16 min/mile**, changeable in the mini-map);
+  - turn at a corner, and it takes the cross street on that side; turn around, and it walks back;
+  - turn mid-block, and it stays put "at a storefront" until you turn back (keep walking that way and it takes the nearest corner, since the generated world's corners won't line up exactly with the map's).
+
+  The arrow shows where the character faces and the blue line where they've been. Every travel starts at Broadway & W 26th St, the start frame's corner.
+- **Store names.** For each block you're on (and the one ahead, plus the cross streets as you near a corner), [`/api/walk/stores`](app/api/walk/stores/route.ts) asks Gemini with **Grounding with Google Maps** for the businesses on each side of the street, keeping only names backed by a Google Maps place (with its Maps link). A lookup takes ~30 s, so blocks are fetched ahead of you and kept for 30 minutes.
+- **Placing them.** While the world streams, [`/api/walk/label`](app/api/walk/label/route.ts) sends the current frame to Gemini vision with this block's stores, split into your left and right for the way you're walking, and gets back boxes for the storefronts it can label. Tags pin to the top of each box, link to Google Maps, and fade when they go stale.
+
+Tuning: the motion reader assumes a ~70° horizontal field of view and treats a scene expanding faster than 6%/s as walking ([`components/walk/use-walk.ts`](components/walk/use-walk.ts)). Open the app with `?walkdebug` to see the live readings on the mini-map while you adjust them.
+
+Limits worth knowing: positions are estimated from camera motion, so cinematic camera moves can read as steps or turns, and distances are only as right as the pace. The world is generated, so after the opening photo a tag is the most plausible real store for that storefront, not recognition. A labelling call takes ~5 s, so tags trail the moving camera a little. Each walk costs a few Google Maps grounding queries plus a vision call every few seconds on your Gemini key. Google requires Maps-sourced names to be attributed (the "Store names: Google Maps" chip and the tags' Maps links do that), and OpenStreetMap's tile policy asks for light use with attribution.
+
+| File | What's in it |
+| --- | --- |
+| [`components/walk/WalkLayer.tsx`](components/walk/WalkLayer.tsx) | Mounts the overlay and mini-map on the stage. |
+| [`components/walk/use-walk.ts`](components/walk/use-walk.ts) | Samples the video, reads its motion, and runs the tracker. |
+| [`components/walk/use-store-labels.ts`](components/walk/use-store-labels.ts) | Block prefetching and the frame-labelling loop. |
+| [`components/walk/StoreLabelOverlay.tsx`](components/walk/StoreLabelOverlay.tsx) | The tags, mapped through the video's object-cover crop and decluttered. |
+| [`components/walk/MiniMap.tsx`](components/walk/MiniMap.tsx) | The corner map: arrow, trail, street, and what the character is doing. |
+
 ## How it works
 
 Each experience is its own Reactor model — `happy-oyster-adventure` and `happy-oyster-director` — so the **mode is chosen before connecting** and fixed for the life of the session. This app always uses Directing; [`HappyOysterApp`](app/HappyOysterApp.tsx) mounts the provider on it.
