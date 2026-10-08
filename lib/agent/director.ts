@@ -5,7 +5,10 @@
 // live steering channel a Directing world has (images are creation-time
 // only). Most ticks it should say nothing: a drifting world settles worse
 // when it's nudged every few seconds, and every instruction lands in the
-// story timeline the user sees.
+// story timeline the user sees. It names the kind of drift it saw (issue) and
+// is told how long ago the last instruction went out, so it lets one land
+// before sending another. Instructions follow Alibaba's HappyOyster guide:
+// short, concrete, one change, present tense (lib/agent/prompts.ts).
 
 import {
   AGENT_FAST_MODEL,
@@ -13,7 +16,15 @@ import {
   imageInput,
   jsonSchemaFormat,
   parseDecision,
+  toolCallsOf,
+  usageOf,
 } from "./openai";
+import { DIRECTOR_SYSTEM } from "./prompts";
+import type {
+  AgentTrace,
+  DirectorOverrides,
+  RecentInstruction,
+} from "./protocol";
 
 export interface DirectorInput {
   /** JPEG data URL of the current frame. */
@@ -24,43 +35,57 @@ export interface DirectorInput {
   chapters: string[];
   /** The recent action log, one line each (lib/agent/events.ts). */
   events: string[];
+  /** The newest instruction sent to the world, from any source. */
+  lastInstruction: RecentInstruction | null;
+  settings?: DirectorOverrides;
 }
+
+export const DIRECTOR_ISSUES = [
+  "none",
+  "camera",
+  "stalled",
+  "off_place",
+  "weather_light",
+  "unwanted_event",
+] as const;
 
 export interface DirectorOutput {
   observation: string;
+  issue: (typeof DIRECTOR_ISSUES)[number];
   instruction: string | null;
+  trace: AgentTrace;
 }
 
 const SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["observation", "instruction"],
+  required: ["observation", "issue", "instruction"],
   properties: {
     observation: {
       type: "string",
       description:
         "One sentence: what the frame shows and whether it still reads as the real place.",
     },
+    issue: {
+      type: "string",
+      enum: DIRECTOR_ISSUES,
+      description: "The one kind of drift the frame shows, or none.",
+    },
     instruction: {
       type: ["string", "null"],
       description:
-        "A scene direction of at most 25 words to send to the world model, or null when the scene is fine.",
+        "One present-tense sentence of at most 15 words describing what happens next on screen, or null.",
     },
   },
 };
-
-const SYSTEM = `You are the Director of a live, AI-generated walking video. The video is meant to look like a real place: {place}. You receive one frame every few seconds plus the recent log of what the user said and what the world was told.
-
-Your job: keep the world grounded to that real place while the user explores it.
-- If the frame still looks like the place (right architecture, street furniture, signage, light, people, or a plausible interior of one of its shops), return instruction: null.
-- If it has drifted — fantasy elements, wrong city, impossible geometry, the camera lost the walker, the scene froze — return ONE concrete scene direction of at most 25 words, written as a camera/scene instruction the video model can act on (e.g. "Continue up Broadway past the cast-iron storefronts, the Broadway Plaza Hotel sign ahead."). Name real details of the place.
-- Respect what the user asked for: if they walked into a pizza shop, keep them in a plausible New York pizza shop; do not drag them back outside.
-- Never repeat an instruction that appears in the recent log. Prefer null when unsure.`;
 
 export async function runDirector(input: DirectorInput): Promise<DirectorOutput> {
   const client = getOpenAI();
   const context = [
     input.worldPrompt ? `World prompt:\n${input.worldPrompt}` : null,
+    input.lastInstruction
+      ? `Last instruction to the world: ${input.lastInstruction.secondsAgo}s ago, from ${input.lastInstruction.source}: "${input.lastInstruction.text}"`
+      : "Last instruction to the world: none yet.",
     input.chapters.length
       ? `Chapters so far:\n${input.chapters.map((c) => `- ${c}`).join("\n")}`
       : null,
@@ -72,24 +97,46 @@ export async function runDirector(input: DirectorInput): Promise<DirectorOutput>
     .filter(Boolean)
     .join("\n\n");
 
+  const settings = input.settings ?? {};
+  const model = settings.model ?? AGENT_FAST_MODEL;
+  const instructions = (settings.systemPrompt ?? DIRECTOR_SYSTEM).replaceAll(
+    "{place}",
+    input.place,
+  );
+  const imageDetail = settings.imageDetail ?? "low";
+
   const response = await client.responses.create({
-    model: AGENT_FAST_MODEL,
-    instructions: SYSTEM.replace("{place}", input.place),
+    model,
+    instructions,
     input: [
       {
         role: "user",
         content: [
           { type: "input_text", text: context },
-          imageInput(input.screenshot),
+          imageInput(input.screenshot, imageDetail),
         ],
       },
     ],
     text: { format: jsonSchemaFormat("director_decision", SCHEMA) },
   });
 
-  const decision = parseDecision<DirectorOutput>(response.output_text, "Director");
+  const decision = parseDecision<Omit<DirectorOutput, "trace">>(
+    response.output_text,
+    "Director",
+  );
   return {
     observation: decision.observation,
+    issue: decision.issue,
     instruction: decision.instruction?.trim() || null,
+    trace: {
+      model,
+      instructions,
+      input: context,
+      imageDetail,
+      tools: [],
+      toolCalls: toolCallsOf(response),
+      output: response.output_text,
+      usage: usageOf(response),
+    },
   };
 }

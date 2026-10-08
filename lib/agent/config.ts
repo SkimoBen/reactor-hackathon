@@ -23,19 +23,29 @@ export const START_SCENE = {
   imagePath: "/start-frame.jpeg",
   place: "Broadway pedestrian plaza at West 26th Street, NoMad / Flatiron, Manhattan",
   title: "Broadway, NoMad",
+  // Laid out the way Alibaba's HappyOyster prompt guide recommends for
+  // Directing worlds (world, character, style, scene, locks, shot plan,
+  // negatives). The server writes its own story script from this, so the
+  // world says "no plot" and the shot plan keeps it a slow stroll. The lead
+  // is the backpacker already walking away from camera in the photo, so the
+  // follow camera has someone real to hold on to. Must stay ≤ 2000 chars.
   prompt: [
-    "You are walking north up Broadway through the NoMad pedestrian plaza at West 26th Street in Manhattan on an overcast summer afternoon.",
-    "The camera follows you from behind at eye level in third person — one continuous take, no cuts, drifting slowly forward as you walk.",
-    "Around you: a car-free stretch of Broadway painted grey with white crosswalk stripes and a green bike lane, granite blocks and white bollards at the edges, and big concrete planters overflowing with pink and purple flowers.",
-    "Café tables with orange and red umbrellas fill the plaza where people eat lunch; a cyclist rolls past; pedestrians in summer clothes cross carrying shopping bags.",
-    "On both sides rise cast-iron and limestone loft buildings with ground-floor shops — a gelato café with a sidewalk menu board, a green-awning storefront, a LinkNYC kiosk, a Do Not Enter / Except Bikes sign on a traffic pole.",
-    "Ahead, the vertical Broadway Plaza Hotel sign and a painted Hudson Realty wall ad, with glass skyscrapers fading into haze far up the avenue.",
-    "Soft diffuse light, muted colours, a light wind stirring the planters. The storefronts have real doors: you can walk through them into their interiors.",
-  ].join(" "),
+    "WORLD: Summer, Manhattan. A photorealistic walk north up Broadway through the NoMad pedestrian plaza at West 26th Street. Slice of life, no plot: a hungry young man on his lunch break browsing the storefronts for something to eat.",
+    "CHARACTER: The lead is the man walking away from camera in the first frame, seen only from behind: twenties, slim, short dark hair, plain white T-shirt, black backpack, khaki chinos, white sneakers. He never turns to face the camera and never speaks.",
+    "STYLE: 4K New York walking-tour footage shot on a gimbal; natural, slightly muted grade; soft overcast daylight.",
+    "SCENE: Car-free Broadway: grey asphalt with white crosswalk stripes, a green bike lane lined with white bollards, granite blocks, big planters of pink and purple flowers, café tables under orange and red umbrellas. Both sides: cast-iron and limestone loft buildings with ground-floor shops — a pizza-by-the-slice counter, a gelato café with a sidewalk menu board, a coffee bar, a green-awning storefront, a LinkNYC kiosk. Ahead: the vertical Broadway Plaza Hotel sign, glass towers in the haze. Every shop has a real glass door and a believable New York interior (pizza counter with whole pies under glass, gelato case, espresso bar). Sound: traffic hum, bike bells, passing chatter.",
+    "LOCKS: Third-person follow camera at eye level a few metres behind him, one continuous take, no cuts. His clothes and backpack never change. At most three people near the camera; everyone else stays in the background.",
+    "SHOT PLAN: Open exactly on the first frame, then he crosses the crosswalk and walks north. 0:10–1:00 he passes the café tables and planters. 1:00–3:00 he strolls slowly past the storefronts, glancing into windows. He enters a shop only when instructed, and stays inside until told to leave.",
+    "NEGATIVE: no fantasy, sci-fi or surreal elements; no change of city, weather or time of day; no cars on the plaza; no music, narration or on-screen text; no sudden events.",
+  ].join("\n"),
 } as const;
 
 /** How often the Director looks at the stream while a travel is live. */
 export const DIRECTOR_INTERVAL_MS = 10_000;
+
+/** After any instruction reaches the world, the Director sits out this long
+ * so the instruction can land before it judges (and steers) again. */
+export const DIRECTOR_COOLDOWN_MS = 15_000;
 
 /** Width of the JPEG frame sent to the agents — small keeps vision cheap. */
 export const SCREENSHOT_WIDTH = 640;

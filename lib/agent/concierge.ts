@@ -18,8 +18,12 @@ import {
   imageInput,
   jsonSchemaFormat,
   parseDecision,
+  toolCallsOf,
+  usageOf,
   webSearchTool,
 } from "./openai";
+import { CONCIERGE_SYSTEM } from "./prompts";
+import type { AgentTrace, ConciergeOverrides, LastOverlay } from "./protocol";
 
 export interface ConciergeInput {
   /** JPEG data URL of the current frame, or null when nothing is streaming. */
@@ -29,6 +33,9 @@ export interface ConciergeInput {
   worldPrompt: string | null;
   chapters: string[];
   events: string[];
+  /** The overlay this Concierge opened last, if any, and how long ago. */
+  lastOverlay?: LastOverlay | null;
+  settings?: ConciergeOverrides;
 }
 
 export interface ConciergeDecision {
@@ -42,6 +49,7 @@ export interface ConciergeDecision {
 export interface ConciergeOutput extends ConciergeDecision {
   /** Whether overlay_url will load inside an <iframe> on this app. */
   embeddable: boolean;
+  trace: AgentTrace;
 }
 
 const SCHEMA = {
@@ -83,18 +91,6 @@ const SCHEMA = {
   },
 };
 
-const SYSTEM = `You are the Concierge for a live, AI-generated walking video of a real place: {place}. The user explores it and sometimes says things. Your job is to notice when what they say is a real-world intent — ordering food, booking a table, buying something — and connect it to a real business they could actually use.
-
-The user's real address is {address}. Treat "near me" as near that address.
-
-Procedure:
-1. From the frame and the recent log, decide what kind of business the character is in or standing outside (pizza shop, gelato café, coffee bar, bookstore…). The world is generated, so signage may be garbled; go by the type of place.
-2. Decide whether the utterance is an actionable intent. Small talk, questions about the scene, and directions to the world ("turn left") are NOT intents → action: "none", overlay_url: null, shop: null.
-3. If it is an intent, use web search to find the real business of that type closest to the address that best matches what's on screen, and its ordering URL. Prefer the business's own online-ordering page; otherwise its Slice, DoorDash, Seamless, or OpenTable listing. Only return URLs you found in search results — never invent one.
-4. Return action: "open_overlay" with the shop and overlay_url. You may also return a short world_instruction so the video plays along with the intent.
-
-Be decisive: when the user clearly wants to order and the frame shows any food business, pick the best real match and open it.`;
-
 export async function runConcierge(input: ConciergeInput): Promise<ConciergeOutput> {
   const client = getOpenAI();
   const context = [
@@ -106,6 +102,7 @@ export async function runConcierge(input: ConciergeInput): Promise<ConciergeOutp
     input.events.length
       ? `Recent log:\n${input.events.join("\n")}`
       : "Recent log: (empty)",
+    describeLastOverlay(input.lastOverlay ?? null),
     input.screenshot
       ? "Here is the current frame."
       : "No video is streaming right now, so there is no frame; decide from the text alone.",
@@ -113,24 +110,42 @@ export async function runConcierge(input: ConciergeInput): Promise<ConciergeOutp
     .filter(Boolean)
     .join("\n\n");
 
+  const settings = input.settings ?? {};
+  const model = settings.model ?? AGENT_MODEL;
+  const instructions = (settings.systemPrompt ?? CONCIERGE_SYSTEM)
+    .replaceAll("{place}", input.place)
+    .replaceAll("{address}", USER_LOCATION.address);
+  const imageDetail = settings.imageDetail ?? "low";
+  const searchContextSize = settings.searchContextSize ?? "medium";
+  const webSearch = settings.webSearch ?? true;
+
   const response = await client.responses.create({
-    model: AGENT_MODEL,
-    instructions: SYSTEM.replace("{place}", input.place).replace(
-      "{address}",
-      USER_LOCATION.address,
-    ),
-    tools: [webSearchTool()],
+    model,
+    instructions,
+    tools: webSearch ? [webSearchTool(searchContextSize)] : [],
+    // Return the URLs each search drew on, for the debug panel.
+    include: webSearch ? ["web_search_call.action.sources"] : undefined,
     input: [
       {
         role: "user",
         content: [
           { type: "input_text", text: context },
-          ...(input.screenshot ? [imageInput(input.screenshot)] : []),
+          ...(input.screenshot ? [imageInput(input.screenshot, imageDetail)] : []),
         ],
       },
     ],
     text: { format: jsonSchemaFormat("concierge_decision", SCHEMA) },
   });
+  const trace: AgentTrace = {
+    model,
+    instructions,
+    input: context,
+    imageDetail: input.screenshot ? imageDetail : null,
+    tools: webSearch ? [`web_search (context: ${searchContextSize})`] : [],
+    toolCalls: toolCallsOf(response),
+    output: response.output_text,
+    usage: usageOf(response),
+  };
 
   const decision = parseDecision<ConciergeDecision>(
     response.output_text,
@@ -144,7 +159,32 @@ export async function runConcierge(input: ConciergeInput): Promise<ConciergeOutp
     overlay_url: open ? overlayUrl : null,
     world_instruction: decision.world_instruction?.trim() || null,
     embeddable: open ? await checkEmbeddable(overlayUrl) : false,
+    trace,
   };
+}
+
+// Spelled out in the user message, not only the system prompt, so the repeat
+// check still applies when the settings panel swaps in an edited prompt.
+function describeLastOverlay(last: LastOverlay | null): string {
+  if (!last)
+    return "Last overlay: none opened yet this session.";
+  const opened = `You last opened "${last.title}" (${last.url}) ${ago(last.openedSecondsAgo)}`;
+  const state =
+    last.closedSecondsAgo === null
+      ? "It is still open."
+      : `The user closed it ${ago(last.closedSecondsAgo)}, after it had been open ${
+          last.openedSecondsAgo - last.closedSecondsAgo
+        }s.`;
+  return [
+    `Last overlay: ${opened}. ${state}`,
+    "Before opening an overlay, compare it with that one. If it would be the same or a similar business (same shop, or same kind of shop for the same need) and it was opened or closed recently (roughly the last few minutes), do NOT open it again unless this utterance explicitly asks for it again (\"open that again\", \"actually, let me order\", \"show me the menu\"). The character still standing at the same counter, or a vague remark about the food, is not a new request — return action \"none\". A clearly different intent or a different kind of business is fine to open.",
+  ].join("\n");
+}
+
+function ago(seconds: number): string {
+  if (seconds < 90) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  return minutes < 90 ? `${minutes} min ago` : `${Math.round(minutes / 60)} h ago`;
 }
 
 function sanitizeUrl(value: string | null): string | null {

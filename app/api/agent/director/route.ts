@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { runDirector, type DirectorInput } from "@/lib/agent/director";
 import { AgentConfigError } from "@/lib/agent/openai";
+import {
+  readDirectorOverrides,
+  readRecentInstruction,
+} from "@/lib/agent/protocol";
 
 // POST one frame + context → the Director's observation and optional
 // instruction. Same error shape as the token route: { error } with 500 for
@@ -25,6 +29,8 @@ export async function POST(request: Request) {
       worldPrompt: body.worldPrompt ?? null,
       chapters: body.chapters ?? [],
       events: body.events ?? [],
+      lastInstruction: readRecentInstruction(body.lastInstruction),
+      settings: readDirectorOverrides(body.settings),
     });
     return NextResponse.json(result, {
       headers: { "Cache-Control": "private, no-store" },

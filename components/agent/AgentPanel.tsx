@@ -3,7 +3,8 @@
 // The frosted panel in the stage's top-right corner: what the user has said
 // (the push-to-talk transcript, with the phrase still forming in grey) and what
 // the agents did about it — the Director's observations and the moves it sent
-// the world, the Concierge's answers. It collapses to its header.
+// the world, the Concierge's answers. It collapses to its header. The gear
+// opens the debug panel: every agent call's inputs, and the agents' settings.
 //
 // Where voice isn't available (Firefox), a text field stands in for the mic so
 // the Concierge can still be reached.
@@ -12,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentEvent } from "@/lib/agent/events";
 import { Spinner } from "@/components/happy-oyster/ui";
 import type { Speech } from "./use-speech";
+import { DebugPanel } from "./DebugPanel";
 
 export function AgentPanel({
   events,
@@ -27,6 +29,7 @@ export function AgentPanel({
   onSay: (text: string) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const [debugOpen, setDebugOpen] = useState(false);
   const feed = events.filter(shown);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -66,6 +69,19 @@ export function AgentPanel({
           </button>
           <div className="flex items-center gap-2">
             {busy && <Spinner />}
+            <button
+              onClick={() => setDebugOpen((value) => !value)}
+              aria-pressed={debugOpen}
+              title="Agent debug & settings"
+              aria-label="Agent debug and settings"
+              className={`flex h-7 w-7 items-center justify-center rounded-full transition ${
+                debugOpen
+                  ? "bg-black/[0.08] text-foreground"
+                  : "text-muted-foreground hover:bg-black/[0.05] hover:text-foreground"
+              }`}
+            >
+              <GearIcon />
+            </button>
             {speech.supported && (
               <MicButton
                 listening={speech.listening}
@@ -107,7 +123,26 @@ export function AgentPanel({
           </>
         )}
       </div>
+      {debugOpen && <DebugPanel onClose={() => setDebugOpen(false)} />}
     </div>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
   );
 }
 
@@ -214,6 +249,12 @@ function Row({ event }: { event: AgentEvent }) {
       return (
         <Line label="Concierge" tone="text-[#c2410c]">
           Opened {event.title}
+        </Line>
+      );
+    case "overlay_closed":
+      return (
+        <Line label="Concierge" tone="text-[#c2410c]">
+          <span className="text-muted-foreground">Closed {event.title}</span>
         </Line>
       );
     case "error":

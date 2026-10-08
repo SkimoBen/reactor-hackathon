@@ -43,7 +43,7 @@ The API key never reaches the browser: the server route [`app/api/reactor/token/
 
 ## What you can do with it
 
-- **One preset world.** The prompt, first frame and every creation knob live in [`lib/agent/config.ts`](lib/agent/config.ts) (`START_SCENE`); the UI exposes none of them.
+- **One preset world.** The prompt and first frame live in [`lib/agent/config.ts`](lib/agent/config.ts) (`START_SCENE`). The transcript's gear opens a debug panel whose Settings tab can override the prompt, resolution, layout and narrative, plus the agents' models and system prompts ([`lib/agent/settings.ts`](lib/agent/settings.ts)).
 - **Talk to it.** Pressing Explore turns on browser speech recognition (Chrome / Safari); each phrase goes to the Concierge agent, which can open a real shop's page or steer the scene. Browsers without it get a text field in the panel.
 - **Watch the Director.** While the travel is live, the Director agent looks at a frame every few seconds and sends the world instructions; its observations and moves appear in the transcript.
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runConcierge, type ConciergeInput } from "@/lib/agent/concierge";
 import { AgentConfigError } from "@/lib/agent/openai";
+import { readConciergeOverrides, readLastOverlay } from "@/lib/agent/protocol";
 
 // POST what the user said + the frame + context → the Concierge's decision,
 // with the overlay URL already probed for iframe-ability. Web search can take
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
       worldPrompt: body.worldPrompt ?? null,
       chapters: body.chapters ?? [],
       events: body.events ?? [],
+      lastOverlay: readLastOverlay(body.lastOverlay),
+      settings: readConciergeOverrides(body.settings),
     });
     return NextResponse.json(result, {
       headers: { "Cache-Control": "private, no-store" },
