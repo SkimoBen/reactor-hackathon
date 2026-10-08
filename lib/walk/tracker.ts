@@ -13,7 +13,9 @@
 //     corner is a little off the map's and you take the nearest one;
 //   - facing back down the block means you turned around;
 //   - while you walk straight, the street's direction slowly corrects drift in
-//     the heading.
+//     the heading;
+//   - when the user has asked for a particular turn ("right onto 27th"), a
+//     turn that way is taken at that corner, wherever the world started it.
 // Pure: one step per motion sample, no clocks or DOM.
 
 import {
@@ -65,6 +67,13 @@ export interface Motion {
   yaw: number;
 }
 
+/** A turn the user asked for: at this intersection, onto this block. */
+export interface PlannedTurn {
+  node: number;
+  onto: Link;
+  side: "left" | "right";
+}
+
 export function startTrack(): Track {
   return {
     link: START_LINK,
@@ -81,7 +90,12 @@ export function positionOf(track: Track): LatLng {
   return pointOn(track.link, track.along);
 }
 
-export function step(track: Track, motion: Motion, now: number): Track {
+export function step(
+  track: Track,
+  motion: Motion,
+  now: number,
+  plan: PlannedTurn | null = null,
+): Track {
   let { link: on, along, turned, walkedM } = track;
   let heading = (track.heading + motion.yaw + 360) % 360;
   let rel = angleDiff(heading, on.bearing);
@@ -93,6 +107,15 @@ export function step(track: Track, motion: Motion, now: number): Track {
   }
 
   if (Math.abs(rel) > TURN_DEG) {
+    // The asked-for turn: the world often starts it before the real corner,
+    // so put you at that corner and on that street.
+    if (plan && rel > 0 === (plan.side === "right")) {
+      const ahead = distanceTo(on, along, plan.node);
+      if (ahead !== null) {
+        const walked = { ...track, walkedM: walkedM + Math.max(0, ahead) };
+        return turnOnto(walked, plan.onto, heading, rel, motion, now);
+      }
+    }
     const corner = cornerNear(on, along);
     const onto = corner === null ? null : bestLink(corner, heading, on.edge);
     if (onto) return turnOnto(track, onto, heading, rel, motion, now);
@@ -126,6 +149,25 @@ export function step(track: Track, motion: Motion, now: number): Track {
     on = next;
   }
   return { link: on, along, heading, activity: "walking", turned, walkedM, offStreetWalkS: 0 };
+}
+
+/** Back out of a storefront onto the sidewalk, facing the way you were walking. */
+export function leaveStorefront(track: Track): Track {
+  if (track.activity !== "facing") return track;
+  return { ...track, heading: track.link.bearing, activity: "stopped", offStreetWalkS: 0 };
+}
+
+/** Metres along the street ahead to `node` (negative if just passed), or null. */
+export function distanceTo(on: Link, along: number, node: number): number | null {
+  if (node === on.from && along < 30) return -along;
+  let current: Link | null = on;
+  let distance = on.length - along;
+  for (let i = 0; current && i < 8; i++) {
+    if (current.to === node) return distance;
+    current = straightOn(current);
+    if (current) distance += current.length;
+  }
+  return null;
 }
 
 /** The block continuing straight on from the end of this one, if any. */

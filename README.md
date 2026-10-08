@@ -76,6 +76,21 @@ While you explore, real store names float over the storefronts and a mini-map in
 - **Store names.** For each block you're on (and the one ahead, plus the cross streets as you near a corner), [`/api/walk/stores`](app/api/walk/stores/route.ts) asks Gemini with **Grounding with Google Maps** for the businesses on each side of the street, keeping only names backed by a Google Maps place (with its Maps link). A lookup takes ~30 s, so blocks are fetched ahead of you and kept for 30 minutes.
 - **Placing them.** While the world streams, [`/api/walk/label`](app/api/walk/label/route.ts) sends the current frame to Gemini vision with this block's stores, split into your left and right for the way you're walking, and gets back boxes for the storefronts it can label. Tags pin to the top of each box, link to Google Maps, and fade when they go stale.
 
+**Explore a place.** Say or type "explore <somewhere>" — *"let's explore the wine bar"*, *"explore sweetgreen"*, *"explore a pizza place"* — and the walk takes it instead of the Concierge ([`components/walk/use-explore.ts`](components/walk/use-explore.ts)):
+
+1. the world is told to walk to it and turn into its entrance;
+2. [`/api/walk/explore`](app/api/walk/explore/route.ts) works out the real business — a storefront on your block by name, or by description via Gemini, otherwise the closest match from Google Maps — then finds its own website with Google Search grounding, keeping it only if it loads (the Google Maps page stands in otherwise);
+3. the site is held in the agents' overlay ("sweetgreen opens when…" in the transcript), and opens the moment the walk sees the character turn into a storefront. The agents' Watcher looks for the moment on screen too, as a backstop, and the hold lasts up to 2½ minutes.
+
+This only happens while a Directing world is streaming; otherwise the words go to the Concierge as usual. A store on your block resolves in ~10 s; one found through Maps takes ~20–30 s.
+
+**Directions.** Say or type them and the walk carries them out ([`components/walk/use-navigate.ts`](components/walk/use-navigate.ts), [`lib/walk/commands.ts`](lib/walk/commands.ts)):
+
+- *"Turn right onto 27th"*, *"make a left on West 28th Street"*, *"take a right onto Fifth Avenue"*, *"turn left"*: the app finds that corner on the real street ahead, tells the world to walk there and turn ("You keep walking along Broadway to West 27th Street, then turn right onto it"), and starts looking up the new block's stores. The mini-map shows "Next: right onto W 27th St". When the character turns that way — even before the real corner, as the world often does — the map puts them on that street, the store labels follow, and the world is told what's really on the new block so the scene matches.
+- *"Get back out onto the street"*, *"leave the store"*: the world is told to step back out onto the street, the site "explore" opened closes, and the map puts the character back on the sidewalk.
+
+The agents follow too: the Director and Concierge now ground the scene in the street the walk has the character on ([`lib/walk/location.ts`](lib/walk/location.ts)) instead of the start frame's corner, so the Director no longer steers a walker on 27th Street back to Broadway.
+
 Tuning: the motion reader assumes a ~70° horizontal field of view and treats a scene expanding faster than 6%/s as walking ([`components/walk/use-walk.ts`](components/walk/use-walk.ts)). Open the app with `?walkdebug` to see the live readings on the mini-map while you adjust them.
 
 Limits worth knowing: positions are estimated from camera motion, so cinematic camera moves can read as steps or turns, and distances are only as right as the pace. The world is generated, so after the opening photo a tag is the most plausible real store for that storefront, not recognition. A labelling call takes ~5 s, so tags trail the moving camera a little. Each walk costs a few Google Maps grounding queries plus a vision call every few seconds on your Gemini key. Google requires Maps-sourced names to be attributed (the "Store names: Google Maps" chip and the tags' Maps links do that), and OpenStreetMap's tile policy asks for light use with attribution.
@@ -87,6 +102,8 @@ Limits worth knowing: positions are estimated from camera motion, so cinematic c
 | [`components/walk/use-store-labels.ts`](components/walk/use-store-labels.ts) | Block prefetching and the frame-labelling loop. |
 | [`components/walk/StoreLabelOverlay.tsx`](components/walk/StoreLabelOverlay.tsx) | The tags, mapped through the video's object-cover crop and decluttered. |
 | [`components/walk/MiniMap.tsx`](components/walk/MiniMap.tsx) | The corner map: arrow, trail, street, and what the character is doing. |
+| [`components/walk/use-explore.ts`](components/walk/use-explore.ts) | "Explore <somewhere>": steer, resolve, hold the site, open it on the turn-in. |
+| [`components/walk/use-navigate.ts`](components/walk/use-navigate.ts) | Directions: planned turns onto named streets, and stepping back out. |
 
 ## How it works
 

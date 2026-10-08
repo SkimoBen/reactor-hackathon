@@ -90,9 +90,17 @@ export function pointOn(l: Link, along: number): LatLng {
   return { lat: a.lat + t * (b.lat - a.lat), lng: a.lng + t * (b.lng - a.lng) };
 }
 
-/** A street crossing `street` at an intersection, e.g. "West 27th Street". */
+/** A street crossing `street` at an intersection, e.g. "West 27th Street".
+ * Not one that just continues it under another name (West → East 27th). */
 export function crossStreet(node: number, street: string): string | null {
-  return LINKS[node].find((l) => l.street !== street)?.street ?? null;
+  const along = LINKS[node].find((l) => l.street === street);
+  const crosses = (l: Link) => {
+    if (l.street === street) return false;
+    if (!along) return true;
+    const turn = Math.abs(angleDiff(l.bearing, along.bearing)) % 180;
+    return turn > 30 && turn < 150;
+  };
+  return (LINKS[node].find(crosses) ?? LINKS[node].find((l) => l.street !== street))?.street ?? null;
 }
 
 /** Midpoint of a block, for location-biased lookups. */

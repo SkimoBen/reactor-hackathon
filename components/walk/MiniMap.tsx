@@ -25,7 +25,16 @@ const ARROW = `<div style="width:26px;height:26px;display:flex;align-items:cente
   <svg width="26" height="26" viewBox="0 0 26 26"><circle cx="13" cy="13" r="12" fill="white" opacity=".9"/><path d="M13 4 20 20 13 16.5 6 20Z" fill="${BLUE}"/></svg>
 </div>`;
 
-export function MiniMap({ walk, status }: { walk: Walk; status: string | null }) {
+export function MiniMap({
+  walk,
+  status,
+  notes,
+}: {
+  walk: Walk;
+  status: string | null;
+  /** What the walk is heading for: a planned turn, a place to explore. */
+  notes: (string | null)[];
+}) {
   const container = useRef<HTMLDivElement>(null);
   const layers = useRef<{ map: LeafletMap; trail: Polyline; marker: Marker } | null>(null);
   const start = useRef(walk.position);
@@ -111,6 +120,11 @@ export function MiniMap({ walk, status }: { walk: Walk; status: string | null })
               ))}
             </select>
           </div>
+          {notes.filter(Boolean).map((note) => (
+            <div key={note} className="mt-1 line-clamp-2 text-[11px] font-medium leading-snug text-primary">
+              {note}
+            </div>
+          ))}
           {debug && (
             <div className="mt-1 font-mono text-[10px] tabular-nums text-tertiary">{debug}</div>
           )}

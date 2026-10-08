@@ -62,7 +62,10 @@ export async function POST(request: NextRequest) {
   }
   try {
     const directory = await pending;
-    cache.set(edge, { at: Date.now(), directory });
+    // Maps grounding sometimes comes back empty; don't keep that, so the
+    // block is looked up afresh on the client's retry.
+    const found = Object.values(directory).some((stores) => stores && stores.length > 0);
+    if (found) cache.set(edge, { at: Date.now(), directory });
     return NextResponse.json(directory);
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause);

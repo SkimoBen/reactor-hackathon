@@ -16,9 +16,15 @@
 // are the expansion rates that count as walking. Add ?walkdebug to the URL to
 // see the live readings on the mini-map.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FLOW_HEIGHT, FLOW_WIDTH, estimateFlow, toGray } from "@/lib/walk/flow";
-import { positionOf, startTrack, step, type Track } from "@/lib/walk/tracker";
+import {
+  positionOf,
+  startTrack,
+  step,
+  type PlannedTurn,
+  type Track,
+} from "@/lib/walk/tracker";
 import { distanceBetween, type LatLng } from "@/lib/walk/streets";
 import type { WorldSession } from "@/components/happy-oyster/use-world-session";
 
@@ -36,6 +42,9 @@ const SMOOTHING_S = 0.8;
 const MIN_QUALITY = 0.5;
 // Walking expands the scene ~1–3% per frame pair; far more is a cut or a jump.
 const MAX_DIVERGENCE_PER_FRAME = 0.08;
+// A frame unchanged this long is standing still (or a frozen stream), not
+// "no new frame yet".
+const FROZEN_MS = 500;
 const TRAIL_STEP_M = 3;
 const MAX_TRAIL = 1500;
 
@@ -60,9 +69,15 @@ export interface Walk extends Track {
   pace: number;
   setPace: (minPerMile: number) => void;
   reading: MotionReading | null;
+  /** Change the tracked state (e.g. leave a storefront); applied on the next sample. */
+  apply: (edit: (track: Track) => Track) => void;
 }
 
-export function useWalk(session: WorldSession): Walk {
+export function useWalk(
+  session: WorldSession,
+  /** A turn the user asked for, if any (lib/walk/commands.ts). */
+  plan: { current: PlannedTurn | null },
+): Walk {
   const { view, client } = session;
   const traveling = view.kind === "traveling";
   const live =
@@ -76,6 +91,7 @@ export function useWalk(session: WorldSession): Walk {
   trackRef.current = track;
   const [trail, setTrail] = useState<LatLng[]>(() => [positionOf(startTrack())]);
   const [reading, setReading] = useState<MotionReading | null>(null);
+  const edits = useRef<((track: Track) => Track)[]>([]);
 
   useEffect(() => {
     if (!traveling) return;
@@ -95,19 +111,24 @@ export function useWalk(session: WorldSession): Walk {
     const id = setInterval(() => {
       const video = document.querySelector<HTMLVideoElement>("video[data-ho-video]");
       const sample = video ? sampler.sample(video) : null;
-      if (!sample) return;
-      const speed = 1609.344 / (paceRef.current * 60);
-      current = step(
-        current,
-        { dt: sample.dt, walking: sample.walking, speed, yaw: sample.yaw },
-        Date.now(),
-      );
+      const edited = edits.current.length > 0;
+      for (const edit of edits.current.splice(0)) current = edit(current);
+      if (!sample && !edited) return;
+      if (sample) {
+        const speed = 1609.344 / (paceRef.current * 60);
+        current = step(
+          current,
+          { dt: sample.dt, walking: sample.walking, speed, yaw: sample.yaw },
+          Date.now(),
+          plan.current,
+        );
+      }
       const now = performance.now();
-      if (now - lastPublish < PUBLISH_MS) return;
+      if (!edited && now - lastPublish < PUBLISH_MS) return;
       lastPublish = now;
       const published = current;
       setTrack(published);
-      setReading(sample.reading);
+      if (sample) setReading(sample.reading);
       setTrail((trail) => {
         const here = positionOf(published);
         const last = trail[trail.length - 1];
@@ -116,7 +137,11 @@ export function useWalk(session: WorldSession): Walk {
       });
     }, SAMPLE_MS);
     return () => clearInterval(id);
-  }, [live]);
+  }, [live, plan]);
+
+  const apply = useCallback((edit: (track: Track) => Track) => {
+    edits.current.push(edit);
+  }, []);
 
   return {
     ...track,
@@ -127,6 +152,7 @@ export function useWalk(session: WorldSession): Walk {
     pace,
     setPace,
     reading,
+    apply,
   };
 }
 
@@ -158,10 +184,17 @@ class MotionSampler {
     const gray = toGray(this.ctx.getImageData(0, 0, FLOW_WIDTH, FLOW_HEIGHT).data);
     const now = performance.now();
     const prev = this.prev;
-    if (!prev || sameFrame(prev, gray)) {
-      // No new frame yet: keep the older one so the next pair spans real motion.
-      if (!prev) [this.prev, this.prevAt] = [gray, now];
+    if (!prev) {
+      [this.prev, this.prevAt] = [gray, now];
       return null;
+    }
+    if (sameFrame(prev, gray)) {
+      // No new frame yet: keep the older one so the next pair spans real
+      // motion — unless the picture has been frozen a while, which is no motion.
+      if (now - this.prevAt < FROZEN_MS) return null;
+      const dt = (now - this.prevAt) / 1000;
+      this.prevAt = now;
+      return this.still(Math.min(dt, 1));
     }
     const dt = (now - this.prevAt) / 1000;
     this.prev = gray;
@@ -184,6 +217,12 @@ class MotionSampler {
     // Content sliding left = the camera turning right.
     const yaw = Math.abs(flow.shiftX) < YAW_DEADBAND_PX ? 0 : -flow.shiftX * DEG_PER_PX;
     return { dt, walking: this.walking, yaw, reading: this.reading(yaw / dt, quality) };
+  }
+
+  private still(dt: number): Sample {
+    this.divergence *= Math.exp(-dt / SMOOTHING_S);
+    this.walking = this.walking ? this.divergence > WALK_OFF : this.divergence > WALK_ON;
+    return { dt, walking: this.walking, yaw: 0, reading: this.reading(0, 1) };
   }
 
   private reading(yawRate: number, quality: number): MotionReading {
