@@ -44,6 +44,12 @@ export interface StoreLabels {
   capturedAt: number;
   /** The lookup for the block you're on. */
   current: BlockLookup | undefined;
+  /** Storefronts on this block and the next, by your left and right. */
+  nearby: { left: Store[]; right: Store[] };
+  /** Start looking up a block you're about to walk. */
+  prefetch: (edge: number) => void;
+  /** A block's storefronts by your left and right walking it this way, once known. */
+  storesOn: (on: Link) => { left: Store[]; right: Store[] } | null;
 }
 
 export function useStoreLabels(active: boolean, walk: Walk): StoreLabels {
@@ -75,6 +81,10 @@ export function useStoreLabels(active: boolean, walk: Walk): StoreLabels {
         if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
         const directory: Directory = {};
         for (const side of SIDES) if (body[side]) directory[side] = body[side];
+        // Nothing found is usually a flaky lookup: try the block again later.
+        if (!Object.values(directory).some((stores) => stores && stores.length > 0)) {
+          throw new Error("no stores found");
+        }
         set({ status: "ready", directory });
       })
       .catch((cause) =>
@@ -144,7 +154,23 @@ export function useStoreLabels(active: boolean, walk: Walk): StoreLabels {
     };
   }, [walk.live]);
 
-  return { ...labels, current: lookups[walk.link.edge] };
+  const storesOn = useCallback((on: Link) => {
+    const lookup = lookupsRef.current[on.edge];
+    if (lookup?.status !== "ready") return null;
+    const sides = leftRight(on);
+    return {
+      left: lookup.directory[sides.left] ?? [],
+      right: lookup.directory[sides.right] ?? [],
+    };
+  }, []);
+
+  return {
+    ...labels,
+    current: lookups[walk.link.edge],
+    nearby: candidates(lookups, walk.link),
+    prefetch: ensure,
+    storesOn,
+  };
 }
 
 // This block's stores first, then the next block's (visible further along),

@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { START_SCENE } from "@/lib/agent/config";
+import { walkPlace } from "@/lib/walk/location";
 import {
   describeEvent,
   logEvent,
@@ -62,6 +63,16 @@ export interface AgentRuntime {
   /** An overlay found but held until the video shows the moment it's for. */
   pending: { title: string; condition: string } | null;
   cancelPending: () => void;
+  /** Open an overlay now (clears any hold). */
+  openOverlay: (target: OverlayTarget) => void;
+  /** Hold an overlay until `condition` shows (the Watcher looks for it) or
+   * something else opens it, e.g. the walk seeing the character turn in. */
+  holdOverlay: (
+    target: OverlayTarget,
+    condition: string,
+    utterance: string,
+    timeoutMs?: number,
+  ) => void;
   /** Hand the Concierge something the user said. */
   say: (text: string) => void;
 }
@@ -88,7 +99,9 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
   const context = useCallback(() => {
     const { client } = latest.current;
     return {
-      place: START_SCENE.place,
+      // Where the walk has the character now; the start frame's corner until
+      // it knows better (lib/walk/location.ts).
+      place: walkPlace() ?? START_SCENE.place,
       worldPrompt: client.worldState?.prompt ?? null,
       chapters: (client.travelState?.chapters ?? [])
         .map((chapter) => chapter.brief ?? chapter.title ?? null)
@@ -260,7 +273,7 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
       const held = pendingRef.current;
       if (busy || !held) return;
       const waitedMs = Date.now() - held.since;
-      if (waitedMs >= getSettings().concierge.waitTimeoutMs) {
+      if (waitedMs >= (held.timeoutMs ?? getSettings().concierge.waitTimeoutMs)) {
         openOverlay(held.target);
         return;
       }
@@ -288,6 +301,14 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
     return () => clearInterval(id);
   }, [watching, waitIntervalMs, openOverlay]);
 
+  const holdOverlay = useCallback(
+    (target: OverlayTarget, condition: string, utterance: string, timeoutMs?: number) => {
+      setPending({ target, condition, utterance, since: Date.now(), timeoutMs });
+      logEvent({ kind: "overlay_pending", title: target.title, condition });
+    },
+    [setPending],
+  );
+
   const closeOverlay = useCallback(() => {
     setOverlay(null);
     const last = lastOverlay.current;
@@ -310,6 +331,8 @@ export function useAgentRuntime(session: WorldSession): AgentRuntime {
       ? { title: pending.target.title, condition: pending.condition }
       : null,
     cancelPending,
+    openOverlay,
+    holdOverlay,
     say: useCallback((text: string) => void say(text), [say]),
   };
 }
@@ -387,6 +410,8 @@ interface PendingRecord {
   /** What the user said, so the Watcher knows what's being acted out. */
   utterance: string;
   since: number;
+  /** How long to hold before opening anyway; the Concierge's setting if unset. */
+  timeoutMs?: number;
 }
 
 function pendingAge(held: PendingRecord | null): PendingOverlay | null {

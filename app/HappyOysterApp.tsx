@@ -15,7 +15,7 @@
 // The intent lives here, above the provider, so the session hook
 // can drive it; nothing connects until Explore is pressed.
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { WorldIntent } from "@/lib/worlds";
 import { loadStartSceneIntent } from "@/lib/agent/start-scene";
 import { LiveClientProvider } from "@/components/happy-oyster/ho-client";
@@ -48,9 +48,20 @@ function Shell({
 }) {
   const session = useWorldSession({ intent, onRun, onClearIntent });
   const agents = useAgentRuntime(session);
+  // Walking directions ("turn right onto 27th", "get back out onto the
+  // street") and "explore <somewhere>" are the walk layer's; everything else
+  // goes to the Concierge.
+  const walkCommands = useRef<((utterance: string) => boolean) | null>(null);
+  const agentsSay = agents.say;
+  const say = useCallback(
+    (text: string) => {
+      if (!walkCommands.current?.(text)) agentsSay(text);
+    },
+    [agentsSay],
+  );
   // Push-to-talk is live whenever a world is up; back on the landing view
   // (Done, Cancel, or a dropped session) the hook stops listening.
-  const speech = useSpeech(agents.say, session.view.kind !== "browse");
+  const speech = useSpeech(say, session.view.kind !== "browse");
   const [preparing, setPreparing] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
@@ -77,7 +88,17 @@ function Shell({
         preparing={preparing}
         startError={startError}
       >
-        <WalkLayer session={session} />
+        <WalkLayer
+          session={session}
+          commands={walkCommands}
+          overlay={{
+            openOverlay: agents.openOverlay,
+            closeOverlay: agents.closeOverlay,
+            holdOverlay: agents.holdOverlay,
+            overlayTitle: agents.overlay?.title ?? null,
+            pendingTitle: agents.pending?.title ?? null,
+          }}
+        />
         <AgentPanel
           events={agents.events}
           speech={speech}
@@ -85,7 +106,7 @@ function Shell({
           error={agents.error}
           pending={agents.pending}
           onCancelPending={agents.cancelPending}
-          onSay={agents.say}
+          onSay={say}
           overlay={
             agents.overlay && (
               <AgentOverlay
