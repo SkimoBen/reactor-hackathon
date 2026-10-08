@@ -2,7 +2,7 @@
 
 // The control rail — always on screen, beside the content screen. What it
 // offers tracks the reducer's view:
-//   browse    → connection badge, featured worlds, composer, attach-by-id
+//   browse    → connection badge, system prompt, composer, attach-by-id
 //   building  → the in-flight intent, and Cancel
 //   ready     → the world card (id capability, travel limit), Start travel
 //   traveling → the countdown and the mode-matched control deck
@@ -16,23 +16,45 @@ import { TRAVEL_SECONDS } from "@/lib/worlds";
 import { Button } from "@/components/ui/button";
 import type { WorldSession } from "./use-world-session";
 import { StatusBadge } from "./StatusBadge";
-import { Gallery } from "./Gallery";
-import { CustomCompose, AttachById } from "./Composer";
+import { CustomCompose, AttachById, type ComposeDraft } from "./Composer";
+import { SystemPromptField, worldPromptBudget } from "./SystemPrompt";
 import { AdventureControls } from "./AdventureControls";
 import { DirectingControls } from "./DirectingControls";
 import { SnapClip } from "./SnapClip";
-import { ModeBadge, SectionLabel, Spinner, WorldIdChip } from "./ui";
+import { ModeBadge, Panel, SectionLabel, Spinner, WorldIdChip } from "./ui";
+import { StartScene } from "@/components/agent/StartScene";
 
-export function Sidebar({ session }: { session: WorldSession }) {
+export function Sidebar({
+  session,
+  composeDraft,
+  onComposeDraftChange,
+  systemPrompt,
+  onSystemPromptChange,
+}: {
+  session: WorldSession;
+  composeDraft: ComposeDraft;
+  onComposeDraftChange: (patch: Partial<ComposeDraft>) => void;
+  systemPrompt: string;
+  onSystemPromptChange: (value: string) => void;
+}) {
   const { view } = session;
   return (
-    <aside className="order-2 flex w-full flex-col gap-4 lg:order-1 lg:w-80 lg:shrink-0 lg:overflow-y-auto lg:pr-1">
+    <aside className="order-2 flex w-full flex-col gap-4 lg:order-1 lg:w-[360px] lg:shrink-0 lg:overflow-y-auto lg:pb-2 lg:pr-1">
       {/* Disconnecting also drops the pending intent — back to browsing. */}
       <StatusBadge onDisconnect={session.exit} />
       {view.kind === "browse" && (
         <>
-          <Gallery onIntent={session.run} />
-          <CustomCompose onIntent={session.run} />
+          <StartScene onIntent={session.run} />
+          <SystemPromptField
+            value={systemPrompt}
+            onChange={onSystemPromptChange}
+          />
+          <CustomCompose
+            draft={composeDraft}
+            onDraftChange={onComposeDraftChange}
+            maxPromptLength={worldPromptBudget(systemPrompt)}
+            onIntent={session.run}
+          />
           <AttachById onIntent={session.run} />
         </>
       )}
@@ -59,10 +81,10 @@ export function Sidebar({ session }: { session: WorldSession }) {
 // the world is claimable before it's even done generating.
 function WorldIdCard({ worldId }: { worldId: string }) {
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <Panel className="gap-2.5">
       <SectionLabel>World id</SectionLabel>
       <WorldIdChip worldId={worldId} />
-    </div>
+    </Panel>
   );
 }
 
@@ -70,14 +92,14 @@ function WorldIdCard({ worldId }: { worldId: string }) {
 // world_state.first_frame during the build, and every travel opens on it.
 function SeedFrameCard({ src }: { src: string }) {
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <Panel className="gap-2.5">
       <SectionLabel>First frame</SectionLabel>
       <img
         src={src}
         alt="The world's generated first frame"
-        className="w-full rounded-md border border-white/[0.06]"
+        className="w-full rounded-xl"
       />
-    </div>
+    </Panel>
   );
 }
 
@@ -95,31 +117,31 @@ function IntentCard({ session }: { session: WorldSession }) {
     session.journey.find((step) => step.status === "active")?.label ??
     "Working…";
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <SectionLabel>
-        {view.kind === "building" && view.restoring
-          ? "Restoring world"
-          : "Building world"}
-      </SectionLabel>
+    <Panel>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-white">{intent.title}</span>
+        <span className="text-[13px] font-medium text-muted-foreground">
+          {view.kind === "building" && view.restoring
+            ? "Restoring world"
+            : "Building world"}
+        </span>
         {mode != null && <ModeBadge mode={mode} />}
       </div>
-      <div className="flex items-center gap-2.5 text-white/60">
+      <span className="text-[21px] font-semibold tracking-[-0.021em] text-foreground">
+        {intent.title}
+      </span>
+      <div className="flex items-center gap-2.5 text-muted-foreground">
         <Spinner />
-        <span className="font-mono text-[11px] uppercase tracking-tight">
-          {status}
-        </span>
+        <span className="text-[13px]">{status}</span>
       </div>
       {prompt && (
-        <p className="font-mono text-xs leading-relaxed text-white/35">
+        <p className="line-clamp-6 text-[13px] leading-[1.45] text-tertiary">
           {prompt}
         </p>
       )}
-      <Button variant="ghost" onClick={session.exit}>
+      <Button variant="secondary" onClick={session.exit}>
         Cancel
       </Button>
-    </div>
+    </Panel>
   );
 }
 
@@ -132,15 +154,15 @@ function ReadyCard({ session }: { session: WorldSession }) {
   const worldState = client.worldState;
   const mode = (worldState?.mode === 2 ? 2 : 1) as 1 | 2;
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+    <Panel>
       <div className="flex items-center justify-between gap-2">
         <SectionLabel>Travel ended</SectionLabel>
         <ModeBadge mode={worldState?.mode ?? null} />
       </div>
-      <span className="font-mono text-[11px] uppercase tracking-tight text-white/40">
+      <span className="text-[13px] text-muted-foreground">
         {formatLimit(TRAVEL_SECONDS[mode])} per travel
       </span>
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1">
         <Button onClick={session.beginTravel} disabled={starting}>
           {starting ? "Starting…" : "Travel again"}
         </Button>
@@ -148,7 +170,7 @@ function ReadyCard({ session }: { session: WorldSession }) {
           Back to worlds
         </Button>
       </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -174,18 +196,19 @@ function TravelDeck({ session }: { session: WorldSession }) {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-        <div className="flex items-center gap-2">
-          <ModeBadge mode={mode} />
+      <Panel className="flex-row items-center justify-between gap-2 py-4">
+        <div className="flex items-center gap-2.5">
           <TravelClock secondsLeft={secondsLeft} />
+          <ModeBadge mode={mode} />
         </div>
-        <button
+        <Button
+          size="sm"
+          variant="danger"
           onClick={() => void client.endTravelSession().catch(() => {})}
-          className="inline-flex h-8 items-center justify-center rounded-md border border-white/15 bg-white/10 px-2.5 text-sm font-medium text-white/70 transition hover:border-red-400/40 hover:bg-red-500/20 hover:text-red-300"
         >
           End travel
-        </button>
-      </div>
+        </Button>
+      </Panel>
       {session.seedFrame && <SeedFrameCard src={session.seedFrame} />}
       {live && (mode === 2 ? <DirectingControls /> : <AdventureControls />)}
     </>
@@ -236,10 +259,8 @@ function TravelClock({ secondsLeft }: { secondsLeft: number }) {
   const warn = secondsLeft <= 10;
   return (
     <span
-      className={`rounded px-2 py-0.5 font-mono text-sm font-medium tabular-nums ${
-        warn
-          ? "bg-red-500/90 text-white"
-          : "bg-primary/90 text-primary-foreground"
+      className={`text-[28px] font-semibold leading-none tracking-[-0.02em] tabular-nums transition-colors ${
+        warn ? "text-destructive" : "text-foreground"
       }`}
     >
       {minutes}:{seconds}
@@ -253,19 +274,19 @@ function ErrorCard({ session }: { session: WorldSession }) {
   const { view } = session;
   if (view.kind !== "error") return null;
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-red-400/20 bg-red-500/[0.06] p-4">
+    <Panel>
       <SectionLabel>
         {view.buildFailed ? "World build failed" : "Something broke"}
       </SectionLabel>
-      <p className="break-words text-xs leading-relaxed text-red-300/90">
+      <p className="break-words text-[13px] leading-[1.45] text-destructive">
         {view.message}
       </p>
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1">
         <Button onClick={session.retry}>Try again</Button>
         <Button variant="ghost" onClick={session.exit}>
           Back to worlds
         </Button>
       </div>
-    </div>
+    </Panel>
   );
 }

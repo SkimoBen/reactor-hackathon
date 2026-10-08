@@ -24,6 +24,7 @@ import {
   useHappyOyster,
   useHappyOysterTravelStatus,
 } from "@reactor-models/happy-oyster/react";
+import { logEvent, type AgentSource } from "@/lib/agent/events";
 import type {
   AdventureCommand,
   CreateWorldParams,
@@ -59,7 +60,12 @@ export interface HappyOysterClient {
     interaction?: true;
   }) => Promise<void>;
   stop: () => Promise<void>;
-  instruct: (content: string) => Promise<{ accepted: boolean }>;
+  /** Steer a Directing travel. `source` tags the log entry (lib/agent/events):
+   * the user by default, or the agent that sent it. */
+  instruct: (
+    content: string,
+    opts?: { source?: AgentSource },
+  ) => Promise<{ accepted: boolean }>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
   rewind: (rewindToSec: number) => Promise<{ resumedAtSec: number }>;
@@ -205,14 +211,46 @@ function LiveClientBridge({ children }: { children: ReactNode }) {
       startTravel: ho.startTravel,
       endTravelSession: ho.endTravelSession,
       disconnect: ho.disconnect,
-      hold: ho.hold,
-      interact: ho.interact,
+      // Every steering call is logged for the agents (lib/agent/events):
+      // HappyOyster itself never reports what the user did.
+      hold: (command) => {
+        const held = Object.entries(command)
+          .filter(([, value]) => value && value !== "None")
+          .map(([axis, value]) => `${axis}=${value}`);
+        if (held.length)
+          logEvent({ kind: "control", detail: `hold ${held.join(" ")}` });
+        return ho.hold(command);
+      },
+      interact: (verb) => {
+        logEvent({ kind: "control", detail: `interact ${verb}` });
+        return ho.interact(verb);
+      },
       release: ho.release,
       stop: ho.stop,
-      instruct: ho.instruct,
-      pause: ho.pause,
-      resume: ho.resume,
-      rewind: ho.rewind,
+      instruct: (content, opts) => {
+        logEvent({
+          kind: "instruction",
+          text: content,
+          source: opts?.source ?? "user",
+        });
+        return ho.instruct(content);
+      },
+      pause: () => {
+        logEvent({ kind: "transport", action: "pause" });
+        return ho.pause();
+      },
+      resume: () => {
+        logEvent({ kind: "transport", action: "resume" });
+        return ho.resume();
+      },
+      rewind: (rewindToSec) => {
+        logEvent({
+          kind: "transport",
+          action: "rewind",
+          detail: `to ${rewindToSec}s`,
+        });
+        return ho.rewind(rewindToSec);
+      },
     }),
     [ho, travelStatus, lastError, connect],
   );
@@ -221,7 +259,12 @@ function LiveClientBridge({ children }: { children: ReactNode }) {
     () => ({
       client,
       videoSlot: (
-        <HappyOysterVideo className="absolute inset-0 h-full w-full object-contain" />
+        // data-ho-video lets lib/agent/screenshot.ts find the element for
+        // frame capture without threading a ref through the SDK component.
+        <HappyOysterVideo
+          data-ho-video=""
+          className="absolute inset-0 h-full w-full object-contain"
+        />
       ),
     }),
     [client],

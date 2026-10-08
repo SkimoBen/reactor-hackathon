@@ -9,29 +9,63 @@ import { useState } from "react";
 import { MAX_FIRST_FRAME_IMAGE_BYTES } from "@reactor-models/happy-oyster";
 import type { WorldIntent } from "@/lib/worlds";
 import { Button } from "@/components/ui/button";
-import { SectionLabel } from "./ui";
+import { FIELD, Hint, Panel, SectionLabel, Segmented } from "./ui";
+
+// Everything the composer has typed. It lives above the sidebar's view switch
+// (in HappyOysterApp) rather than in this component: the composer only mounts
+// while browsing, so if a build fails and you come back, local state would
+// have been thrown away with the unmount — and the prompt with it.
+//
+// Mode-specific creation knobs: perspective/resolution carry the model's
+// documented defaults, so they always ride the payload harmlessly; layout and
+// narrative have no server default, so "auto" means omit and let the model
+// choose (matching a build that never set them).
+export interface ComposeDraft {
+  prompt: string;
+  mode: 1 | 2;
+  imageFile: File | null;
+  perspective: "third_person" | "first_person";
+  resolution: "720p" | "480p";
+  layout: "auto" | "Stable" | "Fast";
+  narrative: "auto" | "Normal" | "Calm" | "Dramatic";
+}
+
+export const EMPTY_COMPOSE_DRAFT: ComposeDraft = {
+  prompt: "",
+  mode: 1,
+  imageFile: null,
+  perspective: "third_person",
+  resolution: "720p",
+  layout: "auto",
+  narrative: "auto",
+};
 
 export function CustomCompose({
+  draft,
+  onDraftChange,
+  maxPromptLength,
   onIntent,
 }: {
+  draft: ComposeDraft;
+  onDraftChange: (patch: Partial<ComposeDraft>) => void;
+  /** What's left of the model's prompt cap after the system prompt. */
+  maxPromptLength: number;
   onIntent: (intent: WorldIntent) => void;
 }) {
-  const [prompt, setPrompt] = useState("");
-  const [mode, setMode] = useState<1 | 2>(1);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const { prompt, mode, imageFile, perspective, resolution, layout, narrative } =
+    draft;
+  const setPrompt = (prompt: string) => onDraftChange({ prompt });
+  const setMode = (mode: 1 | 2) => onDraftChange({ mode });
+  const setImageFile = (imageFile: File | null) => onDraftChange({ imageFile });
+  const setPerspective = (perspective: ComposeDraft["perspective"]) =>
+    onDraftChange({ perspective });
+  const setResolution = (resolution: ComposeDraft["resolution"]) =>
+    onDraftChange({ resolution });
+  const setLayout = (layout: ComposeDraft["layout"]) => onDraftChange({ layout });
+  const setNarrative = (narrative: ComposeDraft["narrative"]) =>
+    onDraftChange({ narrative });
+  // Transient: an over-limit pick is worth a message, not worth remembering.
   const [imageError, setImageError] = useState<string | null>(null);
-  // Mode-specific creation knobs. perspective/resolution carry the model's
-  // documented defaults, so they always ride the payload harmlessly; layout
-  // and narrative have no server default, so "auto" means omit and let the
-  // model choose (matching a build that never set them).
-  const [perspective, setPerspective] = useState<
-    "third_person" | "first_person"
-  >("third_person");
-  const [resolution, setResolution] = useState<"720p" | "480p">("720p");
-  const [layout, setLayout] = useState<"auto" | "Stable" | "Fast">("auto");
-  const [narrative, setNarrative] = useState<
-    "auto" | "Normal" | "Calm" | "Dramatic"
-  >("auto");
 
   const build = () => {
     const text = prompt.trim();
@@ -55,31 +89,37 @@ export function CustomCompose({
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <SectionLabel>Compose your own</SectionLabel>
+    <Panel className="gap-4">
+      <SectionLabel>Create a world</SectionLabel>
+      <Segmented
+        value={mode}
+        onChange={setMode}
+        options={MODE_OPTIONS}
+      />
       <textarea
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
         rows={4}
-        maxLength={2000}
+        maxLength={maxPromptLength}
         placeholder="Describe a world… a paragraph with explicit setting, mood, and camera framing works best."
-        className="w-full resize-none rounded-md border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white/85 outline-none transition placeholder:text-white/25 focus:border-white/30 focus:ring-2 focus:ring-primary/20"
+        className={`${FIELD} resize-none`}
       />
       {imageFile ? (
-        <div className="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-black/30 px-3 py-2">
-          <span className="min-w-0 truncate font-mono text-xs text-white/70">
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-muted px-3.5 py-2.5">
+          <span className="min-w-0 truncate text-[13px] text-foreground">
             {imageFile.name}
           </span>
           <button
             onClick={() => setImageFile(null)}
-            className="shrink-0 text-xs text-white/40 transition hover:text-white/80"
+            className="shrink-0 text-[13px] text-primary transition hover:underline"
           >
             Remove
           </button>
         </div>
       ) : (
-        <label className="flex cursor-pointer items-center justify-center rounded-md border border-dashed border-white/15 bg-black/20 px-3 py-2 text-xs text-white/40 transition hover:border-white/30 hover:text-white/70">
-          Optional first-frame image
+        <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border px-3.5 py-2.5 text-[13px] text-muted-foreground transition hover:border-primary hover:text-primary">
+          <span aria-hidden className="text-[15px] leading-none">+</span>
+          Add a first-frame image
           <input
             type="file"
             accept="image/*"
@@ -99,21 +139,8 @@ export function CustomCompose({
         </label>
       )}
       {imageError && (
-        <p className="text-[11px] text-red-300/90">{imageError}</p>
+        <p className="text-[12px] text-destructive">{imageError}</p>
       )}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1 rounded-md border border-white/10 bg-black/20 p-0.5">
-          <ModeToggle active={mode === 1} onClick={() => setMode(1)}>
-            Adventure
-          </ModeToggle>
-          <ModeToggle active={mode === 2} onClick={() => setMode(2)}>
-            Directing
-          </ModeToggle>
-        </div>
-        <Button onClick={build} disabled={prompt.trim().length === 0}>
-          Build world
-        </Button>
-      </div>
       {mode === 1 ? (
         <OptionGroup
           label="Perspective"
@@ -125,7 +152,7 @@ export function CustomCompose({
           ]}
         />
       ) : (
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-3">
           <OptionGroup
             label="Resolution"
             value={resolution}
@@ -158,12 +185,15 @@ export function CustomCompose({
           />
         </div>
       )}
-      <p className="text-[11px] leading-relaxed text-white/30">
+      <Hint>
         {mode === 1
           ? "Adventure worlds are playable, you drive them with WASD."
           : "Directing worlds are steered with text instructions and transport."}
-      </p>
-    </div>
+      </Hint>
+      <Button onClick={build} disabled={prompt.trim().length === 0}>
+        Build world
+      </Button>
+    </Panel>
   );
 }
 
@@ -177,29 +207,24 @@ export function AttachById({
   // has to connect to the matching mode — pick it here.
   const [mode, setMode] = useState<1 | 2>(1);
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <SectionLabel>Return to an existing world</SectionLabel>
-      <p className="text-[11px] leading-relaxed text-white/30">
-        Worlds are permanent. Paste an <code>encrypted_world_id</code> you saved
-        from an earlier build to jump straight back in, no build wait — and pick
-        the experience it belongs to.
-      </p>
-      <div className="flex items-center gap-1 self-start rounded-md border border-white/10 bg-black/20 p-0.5">
-        <ModeToggle active={mode === 1} onClick={() => setMode(1)}>
-          Adventure
-        </ModeToggle>
-        <ModeToggle active={mode === 2} onClick={() => setMode(2)}>
-          Directing
-        </ModeToggle>
-      </div>
-      <div className="flex gap-1.5">
+    <Panel>
+      <SectionLabel>Return to a world</SectionLabel>
+      <Hint>
+        Worlds are permanent. Paste an id you saved from an earlier build to
+        jump straight back in, no build wait — and pick the experience it
+        belongs to.
+      </Hint>
+      <Segmented value={mode} onChange={setMode} options={MODE_OPTIONS} />
+      <div className="flex gap-2">
         <input
           value={id}
           onChange={(event) => setId(event.target.value)}
           placeholder="encrypted_world_id"
-          className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white/85 outline-none transition placeholder:text-white/25 focus:border-white/30"
+          className={`${FIELD} min-w-0 flex-1 font-mono text-[13px]`}
         />
         <Button
+          variant="secondary"
+          className="h-auto"
           onClick={() =>
             onIntent({
               kind: "attach",
@@ -213,32 +238,14 @@ export function AttachById({
           Attach
         </Button>
       </div>
-    </div>
+    </Panel>
   );
 }
 
-function ModeToggle({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-        active
-          ? "bg-primary text-primary-foreground"
-          : "text-white/50 hover:text-white/80"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
+const MODE_OPTIONS: { value: 1 | 2; label: string }[] = [
+  { value: 1, label: "Adventure" },
+  { value: 2, label: "Directing" },
+];
 
 // A labelled segmented control for one creation knob. Kept generic over the
 // option value so each caller stays typed to its own enum.
@@ -255,25 +262,10 @@ function OptionGroup<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="font-mono text-[10px] uppercase tracking-wide text-white/35">
+      <span className="text-[12px] font-medium text-muted-foreground">
         {label}
       </span>
-      <div className="flex gap-1 rounded-md border border-white/10 bg-black/20 p-0.5">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            className={`flex-1 whitespace-nowrap rounded px-2 py-1 text-center text-xs transition ${
-              value === option.value
-                ? "bg-white/15 text-white"
-                : "text-white/50 hover:text-white/80"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Segmented value={value} onChange={onChange} options={options} />
     </div>
   );
 }

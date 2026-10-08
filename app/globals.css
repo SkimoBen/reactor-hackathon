@@ -8,8 +8,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--reactor-font-sans);
-  --font-mono: var(--reactor-font-mono);
+  --font-sans: var(--apple-font-sans);
+  --font-mono: var(--apple-font-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,6 +39,10 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-fill: var(--fill);
+  --color-tertiary: var(--tertiary);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -48,75 +52,52 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+/* Light-only, in Apple's web palette: a soft gray canvas, white cards, near-black
+   type, and a single blue for anything you can act on. */
 :root {
-  /* Reactor UI Colors */
-  --background: var(--reactor-color-light);
-  --foreground: var(--reactor-color-interstellar);
-  --card: var(--reactor-color-light);
-  --card-foreground: var(--reactor-color-interstellar);
-  --popover: var(--reactor-color-light);
-  --popover-foreground: var(--reactor-color-interstellar);
-  --primary: var(--reactor-color-light-gold);
-  --primary-foreground: var(--reactor-color-interstellar);
-  --secondary: #f5f5f5;
-  --secondary-foreground: var(--reactor-color-interstellar);
-  --muted: #f5f5f5;
-  --muted-foreground: #666666;
-  --accent: var(--reactor-color-light-gold);
-  --accent-foreground: var(--reactor-color-interstellar);
-  --destructive: #ef4444;
-  --border: #e5e5e5;
-  --input: #e5e5e5;
-  --ring: var(--reactor-color-interstellar);
-  --chart-1: var(--reactor-color-light-gold);
-  --chart-2: #e8dfa0;
-  --chart-3: #d4c97a;
-  --chart-4: #c0b354;
-  --chart-5: #ac9d2e;
-  --radius: 4px;
-  --sidebar: #fafafa;
-  --sidebar-foreground: var(--reactor-color-interstellar);
-  --sidebar-primary: var(--reactor-color-light-gold);
-  --sidebar-primary-foreground: var(--reactor-color-interstellar);
-  --sidebar-accent: var(--reactor-color-light-gold);
-  --sidebar-accent-foreground: var(--reactor-color-interstellar);
-  --sidebar-border: #e5e5e5;
-  --sidebar-ring: var(--reactor-color-interstellar);
-}
+  --apple-font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --apple-font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, monospace;
 
-.dark {
-  /* Reactor UI Colors - Dark Mode */
-  --background: var(--reactor-color-interstellar);
-  --foreground: var(--reactor-color-light);
-  --card: #1a1a1a;
-  --card-foreground: var(--reactor-color-light);
-  --popover: #1a1a1a;
-  --popover-foreground: var(--reactor-color-light);
-  --primary: var(--reactor-color-light-gold);
-  --primary-foreground: var(--reactor-color-interstellar);
-  --secondary: #2a2a2a;
-  --secondary-foreground: var(--reactor-color-light);
-  --muted: #2a2a2a;
-  --muted-foreground: #999999;
-  --accent: var(--reactor-color-light-gold);
-  --accent-foreground: var(--reactor-color-interstellar);
-  --destructive: #ef4444;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.15);
-  --ring: var(--reactor-color-light-gold);
-  --chart-1: var(--reactor-color-light-gold);
-  --chart-2: #e8dfa0;
-  --chart-3: #d4c97a;
-  --chart-4: #c0b354;
-  --chart-5: #ac9d2e;
-  --sidebar: #1a1a1a;
-  --sidebar-foreground: var(--reactor-color-light);
-  --sidebar-primary: var(--reactor-color-light-gold);
-  --sidebar-primary-foreground: var(--reactor-color-interstellar);
-  --sidebar-accent: var(--reactor-color-light-gold);
-  --sidebar-accent-foreground: var(--reactor-color-interstellar);
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-ring: var(--reactor-color-light-gold);
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #0071e3;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f7;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f5f5f7;
+  --muted-foreground: #6e6e73;
+  --tertiary: #86868b;
+  --fill: #e8e8ed;
+  --accent: #0071e3;
+  --accent-foreground: #ffffff;
+  --destructive: #e30000;
+  --success: #34c759;
+  --warning: #ff9f0a;
+  --border: #d2d2d7;
+  --input: #d2d2d7;
+  --ring: #0071e3;
+  --chart-1: #0071e3;
+  --chart-2: #2997ff;
+  --chart-3: #5ac8fa;
+  --chart-4: #34c759;
+  --chart-5: #ff9f0a;
+  --radius: 12px;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #0071e3;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f5f5f7;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #d2d2d7;
+  --sidebar-ring: #0071e3;
+  color-scheme: light;
 }
 
 @layer base {
@@ -125,31 +106,37 @@
   }
   body {
     @apply bg-background text-foreground;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: rgba(0, 113, 227, 0.2);
   }
 }
 
-/* Subtle scrollbars that match the dark UI (the default white bar clashes
-   against the dark panels). Firefox + WebKit/Chromium. */
-.dark {
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+/* Thin, quiet scrollbars like macOS overlay bars. */
+* {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
   scrollbar-width: thin;
 }
-.dark *::-webkit-scrollbar {
+*::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-.dark *::-webkit-scrollbar-track {
+*::-webkit-scrollbar-track {
   background: transparent;
 }
-.dark *::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.15);
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.18);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.dark *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.32);
 }
-.dark *::-webkit-scrollbar-corner {
+*::-webkit-scrollbar-corner {
   background: transparent;
 }

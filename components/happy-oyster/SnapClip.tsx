@@ -11,7 +11,7 @@ import {
 } from "@reactor-team/js-sdk";
 import { useHappyOyster } from "@reactor-models/happy-oyster/react";
 import { Button } from "@/components/ui/button";
-import { SectionLabel } from "./ui";
+import { Panel, SectionLabel } from "./ui";
 
 // "Snap clip" panel.
 //
@@ -73,13 +73,13 @@ export function SnapClip({ durationSeconds = 10 }: SnapClipProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <Panel>
       <SectionLabel>Capture</SectionLabel>
-      <Button onClick={snap} disabled={busy}>
+      <Button variant="secondary" onClick={snap} disabled={busy}>
         {busy ? "Capturing…" : `Snap last ${durationSeconds}s`}
       </Button>
       {error && (
-        <p className="break-words text-xs leading-relaxed text-red-300/90">
+        <p className="break-words text-[13px] leading-snug text-destructive">
           {error}
         </p>
       )}
@@ -92,7 +92,7 @@ export function SnapClip({ durationSeconds = 10 }: SnapClipProps) {
           onDownloaded={() => setError(null)}
         />
       )}
-    </div>
+    </Panel>
   );
 }
 
@@ -112,14 +112,14 @@ function ClipModal({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-md"
     >
       <div
         onClick={(event) => event.stopPropagation()}
-        className="flex w-full max-w-2xl flex-col gap-3 rounded-xl border border-white/10 bg-zinc-950 p-4 shadow-xl"
+        className="flex w-full max-w-2xl flex-col gap-4 rounded-[22px] bg-card p-5 shadow-[0_24px_80px_rgba(0,0,0,0.25)]"
       >
         <div className="flex items-center justify-between gap-3">
-          <SectionLabel>Clip · {clip.kind}</SectionLabel>
+          <SectionLabel>Your clip</SectionLabel>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close
           </Button>
@@ -129,7 +129,7 @@ function ClipModal({
           clip={clip}
           getJwt={getJwt}
           onError={onError}
-          className="w-full overflow-hidden rounded-md border border-white/[0.06]"
+          className="w-full overflow-hidden rounded-xl bg-black"
         />
 
         <div className="flex justify-end">

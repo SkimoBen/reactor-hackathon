@@ -16,7 +16,7 @@ import {
 } from "react";
 import type { AdventureCommand } from "@reactor-models/happy-oyster";
 import { useHappyOysterClient } from "./ho-client";
-import { SectionLabel } from "./ui";
+import { Hint, Panel, SectionLabel } from "./ui";
 
 type Translation = NonNullable<AdventureCommand["translation"]>;
 type Rotation = NonNullable<AdventureCommand["rotation"]>;
@@ -203,11 +203,11 @@ export function AdventureControls() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-        <div className="flex flex-wrap items-center justify-between gap-1">
-          <SectionLabel>Your input</SectionLabel>
-          <span className="font-mono text-[10px] text-white/30">
-            chords compose · W+A strafes · Shift+W sprints
+      <Panel className="gap-4">
+        <div className="flex flex-col gap-0.5">
+          <SectionLabel>Controls</SectionLabel>
+          <span className="text-[12px] text-muted-foreground">
+            Chords compose · W+A strafes · Shift+W sprints
           </span>
         </div>
         <div className="flex items-start justify-center gap-8">
@@ -220,7 +220,9 @@ export function AdventureControls() {
               {pad("s", "S")}
               {pad("d", "D")}
             </div>
-            <span className="text-sm text-white/40">Move</span>
+            <span className="text-[12px] font-medium text-muted-foreground">
+              Move
+            </span>
           </div>
           <div className="flex flex-col items-center gap-2">
             <div className="grid grid-cols-3 grid-rows-2 gap-1.5">
@@ -231,14 +233,16 @@ export function AdventureControls() {
               {pad("arrowdown", "↓")}
               {pad("arrowright", "→")}
             </div>
-            <span className="text-sm text-white/40">Look</span>
+            <span className="text-[12px] font-medium text-muted-foreground">
+              Look
+            </span>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-1.5">
           {pad(" ", "Jump · Space", true)}
           {pad("shift", "Sprint · Shift", true)}
         </div>
-      </div>
+      </Panel>
 
       <ActionPanel
         verbs={[
@@ -252,10 +256,11 @@ export function AdventureControls() {
   );
 }
 
+// Keycaps: white with a hairline and a soft bottom edge, pressing to blue.
 const KEY_ACTIVE =
-  "border-primary/70 bg-primary/25 text-primary shadow-[0_0_10px_rgba(199,192,153,0.45)]";
+  "border-primary bg-primary text-primary-foreground shadow-[0_1px_0_rgba(0,0,0,0.1)]";
 const KEY_OFF =
-  "border-white/10 bg-white/[0.04] text-white/45 hover:border-white/25";
+  "border-border bg-card text-foreground shadow-[0_1px_0_rgba(0,0,0,0.08)] hover:bg-muted";
 
 function Key({
   label,
@@ -279,10 +284,10 @@ function Key({
       onPointerUp={onUp}
       onPointerLeave={onUp}
       onPointerCancel={onUp}
-      className={`flex select-none items-center justify-center rounded-md border font-medium transition touch-none active:scale-95 ${
+      className={`flex select-none items-center justify-center rounded-[10px] border font-medium transition touch-none active:scale-95 ${
         wide
-          ? "h-9 px-3 text-xs"
-          : "h-11 w-11 text-base sm:h-9 sm:w-9 sm:text-sm"
+          ? "h-10 px-3 text-[13px]"
+          : "h-12 w-12 text-[17px] sm:h-11 sm:w-11 sm:text-[15px]"
       } ${active ? KEY_ACTIVE : KEY_OFF}`}
     >
       {label}
@@ -317,19 +322,19 @@ function ActionPanel({
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+    <Panel>
       <SectionLabel>World actions</SectionLabel>
       {verbs.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {verbs.map((verb) => (
             <button
               key={verb}
               disabled={!!firing}
               onClick={() => fire(verb)}
-              className={`rounded-full border px-3.5 py-1.5 font-mono text-xs transition disabled:opacity-40 ${
+              className={`rounded-full px-4 py-1.5 text-[13px] font-medium transition disabled:opacity-40 ${
                 firing === verb
-                  ? "border-primary/70 bg-primary/25 text-primary"
-                  : "border-white/15 text-white/70 hover:border-white/30 hover:text-white/90"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-foreground hover:bg-fill"
               }`}
             >
               {verb}
@@ -337,17 +342,17 @@ function ActionPanel({
           ))}
         </div>
       ) : (
-        <p className="text-[11px] leading-relaxed text-white/30">
+        <Hint>
           This world hasn&apos;t advertised any actions yet. When it does, they
           appear here as buttons.
-        </p>
+        </Hint>
       )}
       {verbs.length > 0 && (
-        <p className="mt-auto text-[11px] leading-relaxed text-white/30">
+        <Hint>
           Actions the world exposes. Commands apply at the next generation
           chunk, so expect a beat of latency.
-        </p>
+        </Hint>
       )}
-    </div>
+    </Panel>
   );
 }

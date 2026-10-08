@@ -6,8 +6,9 @@
 // snaps to multiples of 4 seconds (the server rounds down).
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { useHappyOysterClient } from "./ho-client";
-import { SectionLabel } from "./ui";
+import { FIELD, Hint, Panel, SectionLabel } from "./ui";
 
 export function DirectingControls() {
   const { instruct, pause, resume, rewind, travelState, travelStatus } =
@@ -37,14 +38,14 @@ export function DirectingControls() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <Panel>
         <div className="flex items-center justify-between">
           <SectionLabel>Direct the story</SectionLabel>
-          <span className="font-mono text-[10px] uppercase tracking-tight text-white/35">
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-[12px] font-medium capitalize text-muted-foreground">
             {travelStatus}
           </span>
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-2">
           <input
             value={text}
             onChange={(event) => setText(event.target.value)}
@@ -52,17 +53,17 @@ export function DirectingControls() {
               if (event.key === "Enter") send();
             }}
             placeholder="Steer the next scene… “A storm rolls in”"
-            className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white/85 outline-none transition placeholder:text-white/25 focus:border-white/30 focus:ring-2 focus:ring-primary/20"
+            className={`${FIELD} min-w-0 flex-1`}
           />
-          <button
+          <Button
+            className="h-auto shrink-0"
             disabled={busy || text.trim().length === 0}
             onClick={send}
-            className="shrink-0 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:brightness-95 disabled:opacity-40"
           >
             Instruct
-          </button>
+          </Button>
         </div>
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-2 gap-2">
           {paused ? (
             <TransportButton disabled={busy} onClick={() => run(resume)}>
               ▶ Resume
@@ -72,7 +73,7 @@ export function DirectingControls() {
               ⏸ Pause
             </TransportButton>
           )}
-          <div className="flex gap-1.5">
+          <div className="flex gap-2">
             <input
               type="number"
               min={0}
@@ -81,7 +82,7 @@ export function DirectingControls() {
               onChange={(event) =>
                 setRewindSec(Math.max(0, Number(event.target.value)))
               }
-              className="w-16 rounded-md border border-white/10 bg-black/30 px-2 py-1.5 font-mono text-sm text-white/85 outline-none focus:border-white/30"
+              className={`${FIELD} w-16 px-2.5 py-1.5 tabular-nums`}
             />
             <TransportButton
               disabled={busy || !paused}
@@ -92,31 +93,31 @@ export function DirectingControls() {
             </TransportButton>
           </div>
         </div>
-        <p className="text-[11px] leading-relaxed text-white/30">
+        <Hint>
           Instructions steer the next chunk. Rewind takes multiples of 4s and
           needs the session paused first.
-        </p>
-        {error && <p className="text-xs text-red-400">{error}</p>}
-      </div>
+        </Hint>
+        {error && <p className="text-[13px] text-destructive">{error}</p>}
+      </Panel>
 
-      <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <Panel>
         <SectionLabel>Story timeline</SectionLabel>
         {instructions.length === 0 && chapters.length === 0 ? (
-          <p className="text-sm text-white/30">
+          <Hint>
             Your instructions appear here with the window HappyOyster schedules
             them into on the video timeline.
-          </p>
+          </Hint>
         ) : (
-          <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto pr-1">
+          <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-1">
             {instructions.map((instruction, index) => (
               <div
                 key={`${instruction.instruction}-${index}`}
-                className="flex items-baseline justify-between gap-3 rounded-md border border-white/[0.06] bg-black/20 px-3 py-1.5"
+                className="flex items-baseline justify-between gap-3 rounded-[10px] bg-muted px-3.5 py-2"
               >
-                <span className="min-w-0 truncate text-sm text-white/75">
+                <span className="min-w-0 truncate text-[13px] text-foreground">
                   {instruction.instruction}
                 </span>
-                <span className="shrink-0 font-mono text-[10px] tabular-nums text-white/35">
+                <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
                   {instruction.start_time != null &&
                   instruction.end_time != null
                     ? `${instruction.start_time}s–${instruction.end_time}s`
@@ -127,13 +128,13 @@ export function DirectingControls() {
             {chapters.map((chapter, index) => (
               <div
                 key={`chapter-${chapter.chapter_id ?? index}`}
-                className="flex items-baseline justify-between gap-3 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-1.5"
+                className="flex items-baseline justify-between gap-3 rounded-[10px] bg-primary/[0.07] px-3.5 py-2"
               >
-                <span className="min-w-0 truncate text-sm text-primary/90">
+                <span className="min-w-0 truncate text-[13px] font-medium text-primary">
                   {chapter.title ??
                     `Chapter ${chapter.chapter_id ?? index + 1}`}
                 </span>
-                <span className="shrink-0 font-mono text-[10px] tabular-nums text-white/35">
+                <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
                   {chapter.start_time != null && chapter.end_time != null
                     ? `${chapter.start_time}s–${chapter.end_time}s`
                     : ""}
@@ -142,7 +143,7 @@ export function DirectingControls() {
             ))}
           </div>
         )}
-      </div>
+      </Panel>
     </div>
   );
 }
@@ -163,7 +164,7 @@ function TransportButton({
       disabled={disabled}
       title={title}
       onClick={onClick}
-      className="flex-1 rounded-md border border-white/15 bg-white/[0.06] px-3 py-1.5 text-sm text-white/70 transition hover:bg-white/[0.12] hover:text-white/90 disabled:opacity-40"
+      className="flex-1 whitespace-nowrap rounded-full bg-fill px-3 py-2 text-[13px] font-medium text-foreground transition hover:bg-[#dcdce1] disabled:opacity-35"
     >
       {children}
     </button>

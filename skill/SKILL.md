@@ -54,7 +54,7 @@ The model is the single source of truth: it broadcasts one `world_state` snapsho
 
 `createWorld()` runs on the **live, connected session** and an Adventure build takes ~30s (Directing similar; the upstream cap is ~120s). `attachWorld()` on a pre-built world is **instant (no build)**. So:
 
-- Featured worlds with a pinned `encryptedWorldId` attach (cheapest, fastest). The rest create from their prompt.
+- Prefer attaching a saved `encryptedWorldId` (cheapest, fastest) over rebuilding the same prompt.
 - Surface the build honestly: `worldState.phase` moves `creating → building → ready`, and the ready snapshot carries the `first_frame` and the `encrypted_world_id` you should save.
 
 ## Setup: create vs attach
@@ -78,7 +78,7 @@ The most important rule in [`AdventureControls.tsx`](../components/happy-oyster/
 
 [`DirectingControls.tsx`](../components/happy-oyster/DirectingControls.tsx): `instruct(text)` injects a steering instruction into the **live** world (it does not rebuild). `pause()` / `resume()` gate generation; `rewind(sec)` needs the session **paused** and snaps to multiples of 4s (the server rounds down). Debounce sends and disable transport while a call is in flight; the app tracks a `busy` flag. The instruction timeline and auto-detected chapters come off `travelState` (`user_instructions`, `chapters`); render them, don't invent them.
 
-The experience is chosen before connecting and cannot switch mid-session. The composer (and the featured tiles) pick it; the in-session control deck branches on `worldState.mode`.
+The experience is chosen before connecting and cannot switch mid-session. The composer picks it; the in-session control deck branches on `worldState.mode`.
 
 ## Auth: an API key server-side, a scoped JWT in the browser
 
@@ -137,10 +137,6 @@ None of these reject. A refusal resolves the call with `undefined` and arrives a
 an `action_error` broadcast; the facade converts both into a thrown
 `HappyOysterActionError` for you, which is the main reason to prefer
 `startTravel()` over driving the low-level surface yourself.
-
-## Adding a featured world
-
-One entry in [`lib/featured-worlds.json`](../lib/featured-worlds.json): `key`, `title`, `mode` (1 or 2), a paragraph `prompt`, and a `gradient` for the bubble. No component changes. To make it attach instantly instead of building, add its `encryptedWorldId` to [`lib/world-pins.json`](../lib/world-pins.json) (the shipped entries are `REPLACE_WITH_...` placeholders, treated as unpinned until you drop in a real id). Keep prompts paragraph-length with explicit setting and camera framing; short prompts produce unstable worlds.
 
 ## Capturing clips
 

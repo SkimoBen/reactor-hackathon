@@ -15,7 +15,7 @@ import type { WorldIntent } from "./worlds";
 // nothing navigates away.
 
 export type AppView =
-  /** No pending intent: browse the gallery, compose, or attach. */
+  /** No pending intent: compose a world, or attach one. */
   | { kind: "browse" }
   /** Session opening (or reopening) for the pending intent. */
   | { kind: "connecting"; label: string }

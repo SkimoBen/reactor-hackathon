@@ -9,14 +9,10 @@ A Next.js + TypeScript reference frontend for **HappyOyster**, a real-time inter
 
 ```
 ┌─────────────────────────┬────────────────────────────────────┐
-│  Featured worlds        │                                    │
-│  ┌────────┬────────┐    │                                    │
-│  │ Meadow │ City    │   │          live world video          │
-│  ├────────┼────────┤    │                                    │
-│  │ Forest │ Ruins   │   │                                    │
-│  └────────┴────────┘    │                                    │
-│  Compose your own       │                                    │
-│  Attach by world id     │                                    │
+│  Connection             │                                    │
+│  System prompt          │                                    │
+│  Create a world         │          live world video          │
+│  Return to a world      │                                    │
 │  ── while traveling ──  │                                    │
 │  0:42 countdown         │                                    │
 │  WASD · look · verbs    │                                    │
@@ -43,13 +39,12 @@ pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), pick a featured world or compose your own, and the app connects a Reactor session, builds (or attaches) the world, and drops you into the live travel.
+Open [http://localhost:3000](http://localhost:3000), describe a world (or paste the id of one you built before), and the app connects a Reactor session, builds (or attaches) the world, and drops you into the live travel.
 
 The API key never reaches the browser: the server route [`app/api/reactor/token/route.ts`](app/api/reactor/token/route.ts) exchanges it for a short-lived JWT (see [docs.reactor.inc/authentication](https://docs.reactor.inc/authentication)), and the SDK re-fetches it (through the browser's HTTP cache) on every Reactor Platform call via the `getJwt` resolver.
 
 ## What you can do with it
 
-- **Featured worlds.** Six curated worlds: four Adventure, two Directing. A world with a pinned id **attaches** instantly; the rest **create** from their prompt (a ~30s build).
 - **Compose your own.** Free-text prompt, an Adventure/Directing mode toggle, an optional first-frame image upload (≤2MB), and the knobs that apply to the chosen mode: perspective for Adventure; resolution, camera motion, and narrative for Directing.
 - **Attach by id.** Worlds are permanent; paste an `encrypted_world_id` you saved earlier (and pick its experience) to jump straight back in, no build.
 - **Drive Adventure worlds.** WASD moves, arrows (or the on-screen pad) look, chords compose (W+A strafes, Shift+W sprints), and the world's advertised action verbs appear as buttons.
@@ -57,7 +52,7 @@ The API key never reaches the browser: the server route [`app/api/reactor/token/
 
 ## How it works
 
-Each experience is its own Reactor model — `happy-oyster-adventure` and `happy-oyster-director` — so the **mode is chosen before connecting** and fixed for the life of the session. The composer (and the featured-world tiles) pick the mode; [`HappyOysterApp`](app/HappyOysterApp.tsx) mounts the provider on it, and switching experiences remounts a fresh session.
+Each experience is its own Reactor model — `happy-oyster-adventure` and `happy-oyster-director` — so the **mode is chosen before connecting** and fixed for the life of the session. The composer picks the mode; [`HappyOysterApp`](app/HappyOysterApp.tsx) mounts the provider on it, and switching experiences remounts a fresh session.
 
 From there the flow is the typed SDK's linear lifecycle:
 
@@ -92,11 +87,11 @@ If `REACTOR_API_KEY` is missing, the app renders a friendly setup landing instea
 | [`lib/view.ts`](lib/view.ts)                                                                                                          | The app's one reducer: SDK snapshot in, `AppView` out — plus the four-step loading journey the screen traces live.                                                                                  |
 | [`components/happy-oyster/Sidebar.tsx`](components/happy-oyster/Sidebar.tsx)                                                          | The control rail, topped by the `StatusBadge` connection panel: browse surfaces, then the build card, ready card, travel deck (countdown + mode-matched controls), or error card as the view moves. |
 | [`components/happy-oyster/Screen.tsx`](components/happy-oyster/Screen.tsx)                                                            | The content screen the travel video plays in: the journey pane while loading, then the live stream, then the end scene with the world id.                                                           |
-| [`components/happy-oyster/Gallery.tsx`](components/happy-oyster/Gallery.tsx) + [`Composer.tsx`](components/happy-oyster/Composer.tsx) | The browse surfaces: featured worlds, custom compose (prompt, mode toggle, ≤2MB first-frame upload), and attach-by-id.                                                                              |
+| [`components/happy-oyster/Composer.tsx`](components/happy-oyster/Composer.tsx)                                                        | The browse surfaces: custom compose (prompt, mode toggle, ≤2MB first-frame upload) and attach-by-id.                                                                                                |
 | [`components/happy-oyster/AdventureControls.tsx`](components/happy-oyster/AdventureControls.tsx)                                      | WASD + arrows + chords → `hold` / `interact` / `release`; world-advertised verbs.                                                                                                                   |
 | [`components/happy-oyster/DirectingControls.tsx`](components/happy-oyster/DirectingControls.tsx)                                      | Text `instruct`, pause / resume / rewind transport, the instruction + chapter timeline.                                                                                                             |
 | [`app/api/reactor/token/route.ts`](app/api/reactor/token/route.ts)                                                                    | Cacheable GET route that exchanges `REACTOR_API_KEY` for a short-lived JWT.                                                                                                                         |
-| [`lib/worlds.ts`](lib/worlds.ts) + [`lib/featured-worlds.json`](lib/featured-worlds.json)                                             | Featured world data, the countdown lengths, and the `WorldIntent` type.                                                                                                                             |
+| [`lib/worlds.ts`](lib/worlds.ts)                                                                                                      | The countdown lengths and the `WorldIntent` type.                                                                                                                                                   |
 | [`skill/SKILL.md`](skill/SKILL.md)                                                                                                    | The extension guide: the client surface, the lifecycle, the input models, auth, and every gotcha.                                                                                                   |
 
 ## Going further
