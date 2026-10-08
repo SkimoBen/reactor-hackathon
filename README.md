@@ -47,6 +47,29 @@ The API key never reaches the browser: the server route [`app/api/reactor/token/
 - **Talk to it.** Pressing Explore turns on browser speech recognition (Chrome / Safari); each phrase goes to the Concierge agent, which can open a real shop's page or steer the scene. Browsers without it get a text field in the panel.
 - **Watch the Director.** While the travel is live, the Director agent looks at a frame every few seconds and sends the world instructions; its observations and moves appear in the transcript.
 
+## Voice notes (Gemini 3.5 Transcribe Live)
+
+Anywhere you'd type to the model, you can talk instead:
+
+- **Describe a world by voice.** In *Create a world*, press **Describe it by voice**, say what you want, and press **Stop & use**. The note is transcribed live by `gemini-3.5-transcribe-live` and, by default, expanded by Gemini into a paragraph-length world prompt that fits what's left of the prompt cap after the system prompt (short prompts build unstable worlds). It lands in the prompt box for editing; nothing builds until you press **Build world**. With text already in the box, a note revises it ("make it night, add fireflies").
+- **Steer a Directing world by voice.** While traveling, press **Speak an instruction**; when you stop, the transcript goes straight to `instruct()` (logged for the agents like a typed one).
+- **Talk to the agents.** In the Agents console, **Say it out loud** sends the transcript to the Concierge, exactly as if you'd typed it into *Say something*.
+
+```
+mic ─▶ AudioWorklet (16 kHz PCM16) ─▶ Gemini Live, ephemeral token ─▶ transcript
+                                                       ├─▶ /api/world-prompt ─▶ composer ─▶ createWorld()
+                                                       ├─▶ instruct()   (Directing travel)
+                                                       └─▶ Concierge    (Agents console)
+```
+
+| File | What's in it |
+| --- | --- |
+| [`lib/transcriber.ts`](lib/transcriber.ts) | Mic capture and the Gemini Live session; `finish()` ends a note and waits for the last words. |
+| [`public/pcm-recorder-worklet.js`](public/pcm-recorder-worklet.js) | AudioWorklet: native-rate mic → 16 kHz mono PCM16 in 100 ms chunks. |
+| [`components/happy-oyster/VoiceNote.tsx`](components/happy-oyster/VoiceNote.tsx) | The record / stop / live-caption button all three surfaces use (light and dark looks). |
+| [`app/api/gemini/token/route.ts`](app/api/gemini/token/route.ts) | Mints a single-use Gemini Live token locked to the transcription model; the key stays server-side. |
+| [`app/api/world-prompt/route.ts`](app/api/world-prompt/route.ts) | Voice note → mode-aware world prompt. |
+
 ## How it works
 
 Each experience is its own Reactor model — `happy-oyster-adventure` and `happy-oyster-director` — so the **mode is chosen before connecting** and fixed for the life of the session. This app always uses Directing; [`HappyOysterApp`](app/HappyOysterApp.tsx) mounts the provider on it.
@@ -68,10 +91,11 @@ Everything model-specific runs through the typed **`@reactor-models/happy-oyster
 | Env var                        | Required   | What it does                                                                                                                                                     |
 | ------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `REACTOR_API_KEY`              | yes (live) | Server-side key exchanged for session JWTs by `app/api/reactor/token/route.ts`.                                                                                  |
+| `GEMINI_API_KEY`               | voice only | Server-side Gemini key: mints transcription tokens and expands voice notes into world prompts. |
 | `NEXT_PUBLIC_REACTOR_API_URL`  | no         | Reactor API base URL. Defaults to `https://api.reactor.inc`.                                                                                                     |
 | `NEXT_PUBLIC_HO_LOCAL_RUNTIME` | no         | Set to `1` to talk straight to a runtime-served model (adventure on `:8080`, directing on `:8081`), skipping the Reactor Platform: no `REACTOR_API_KEY`, no JWT. |
 
-If `REACTOR_API_KEY` is missing, the app renders a friendly setup landing instead of erroring (see [`app/SetupRequired.tsx`](app/SetupRequired.tsx)).
+`REACTOR_API_KEY` is what links the app to your Reactor account. If it's missing, still the `.env.example` placeholder, or rejected by Reactor (checked once per server start in [`lib/reactor-auth.ts`](lib/reactor-auth.ts)), the app renders a setup landing that says which, instead of failing at Connect (see [`app/SetupRequired.tsx`](app/SetupRequired.tsx)).
 
 ## Code tour
 
