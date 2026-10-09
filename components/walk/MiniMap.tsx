@@ -1,6 +1,6 @@
 "use client";
 
-// The "where am I" window in the stage's bottom-right corner: a small map that
+// The "where am I" window in the stage's bottom-left corner: a small map that
 // follows the character, an arrow pointing where they face (it swings when they
 // turn, even standing still), the trail they've walked, the street and block,
 // what they're doing, and the walking pace (default 16 min/mile).
@@ -91,7 +91,7 @@ export function MiniMap({
   const debug = useDebugReadout(walk);
 
   return (
-    <div className="absolute bottom-24 right-3 z-10 w-48 sm:bottom-6 sm:right-6 sm:w-64">
+    <div className="absolute bottom-24 left-3 z-10 w-48 sm:bottom-6 sm:left-6 sm:w-64">
       <div className="overflow-hidden rounded-[20px] bg-white/75 shadow-[0_8px_40px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] backdrop-blur-2xl backdrop-saturate-150">
         <div className="px-3.5 pb-2 pt-2.5">
           <div className="flex items-baseline gap-1.5">

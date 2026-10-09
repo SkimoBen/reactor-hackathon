@@ -5,13 +5,13 @@
 // the agents did about it — the Director's observations and the moves it sent
 // the world, the Concierge's answers. A shop page the Concierge is holding
 // until the video catches up shows as a "waiting" strip with a cancel. It
-// collapses to its header. Clear wipes the transcript and what the agents
-// remember (the world keeps running); the gear opens the debug panel: every agent call's inputs, and the agents' settings.
+// collapses to its header. The gear opens the debug panel: every agent call's
+// inputs, and the agents' settings.
 // When the Concierge opens a shop (`overlay`), its window docks below in the
 // same column and the transcript shrinks to make room.
 //
-// Where voice isn't available (Firefox), a text field stands in for the mic so
-// the Concierge can still be reached.
+// A text field at the bottom lets the user type instead of talking; where voice
+// isn't available (Firefox) it's the only way to reach the Concierge.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AgentEvent } from "@/lib/agent/events";
@@ -27,7 +27,6 @@ export function AgentPanel({
   pending,
   onCancelPending,
   onSay,
-  onClear,
   overlay,
 }: {
   events: AgentEvent[];
@@ -37,7 +36,6 @@ export function AgentPanel({
   pending: { title: string; condition: string } | null;
   onCancelPending: () => void;
   onSay: (text: string) => void;
-  onClear: () => void;
   /** The Concierge's shop window, docked under the transcript while open. */
   overlay?: ReactNode;
 }) {
@@ -55,10 +53,14 @@ export function AgentPanel({
   const problem = speech.error ?? error;
 
   return (
-    // The column stops above the dock so the shop window never covers it.
+    // The column stops above the dock so the shop window never covers it; on
+    // wide stages the dock is clear of the corner, so an open shop runs down to
+    // the bottom edge.
     <div
       className={`pointer-events-none absolute bottom-[5.5rem] right-3 top-3 z-20 flex flex-col gap-3 transition-[width] duration-300 sm:bottom-[7.5rem] sm:right-6 sm:top-6 ${
-        overlay ? "w-[min(400px,calc(100%-1.5rem))]" : "w-[min(340px,calc(100%-1.5rem))]"
+        overlay
+          ? "w-[min(400px,calc(100%-1.5rem))] lg:bottom-6"
+          : "w-[min(340px,calc(100%-1.5rem))]"
       }`}
     >
       <div className="pointer-events-auto flex min-h-0 shrink-0 flex-col overflow-hidden rounded-[20px] bg-white/70 shadow-[0_8px_40px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06] backdrop-blur-2xl backdrop-saturate-150">
@@ -88,13 +90,6 @@ export function AgentPanel({
           <div className="flex items-center gap-2">
             {busy && <Spinner />}
             <button
-              onClick={onClear}
-              title="Clear the transcript and the agents' memory"
-              className="flex h-7 items-center rounded-full px-2.5 text-[12px] font-medium text-muted-foreground transition hover:bg-black/[0.05] hover:text-foreground"
-            >
-              Clear
-            </button>
-            <button
               onClick={() => setDebugOpen((value) => !value)}
               aria-pressed={debugOpen}
               title="Agent debug & settings"
@@ -123,13 +118,13 @@ export function AgentPanel({
             <div
               ref={scroller}
               className={`flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3.5 transition-[max-height] duration-300 ${
-                overlay ? "max-h-[min(16vh,120px)]" : "max-h-[min(52vh,440px)]"
+                overlay ? "max-h-[min(12vh,96px)]" : "max-h-[min(52vh,440px)]"
               }`}
             >
               {feed.length === 0 && !speech.interim ? (
                 <p className="text-[13px] leading-[1.45] text-muted-foreground">
                   {speech.supported
-                    ? "Hold space to talk once you're exploring. What you say, and what the agent does about it, appears here."
+                    ? "Hold space to talk, or type below, once you're exploring. What you say, and what the agent does about it, appears here."
                     : "Type below once you're exploring. What you say, and what the agent does about it, appears here."}
                 </p>
               ) : (
@@ -167,7 +162,7 @@ export function AgentPanel({
                 {problem}
               </p>
             )}
-            {!speech.supported && <TypeInstead busy={busy} onSay={onSay} />}
+            <TypeBox busy={busy} onSay={onSay} />
           </>
         )}
       </div>
@@ -236,7 +231,7 @@ function MicButton({
   );
 }
 
-function TypeInstead({
+function TypeBox({
   busy,
   onSay,
 }: {

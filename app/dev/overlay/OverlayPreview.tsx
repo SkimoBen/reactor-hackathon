@@ -16,7 +16,7 @@ export function OverlayPreview({ target }: { target: OverlayTarget }) {
           Reopen overlay
         </button>
         {open && (
-          <div className="absolute bottom-[5.5rem] right-3 top-3 flex w-[min(400px,calc(100%-1.5rem))] flex-col sm:bottom-[7.5rem] sm:right-6 sm:top-6">
+          <div className="absolute bottom-[5.5rem] right-3 top-3 flex w-[min(400px,calc(100%-1.5rem))] flex-col sm:bottom-[7.5rem] sm:right-6 sm:top-6 lg:bottom-6">
             <AgentOverlay target={target} onClose={() => setOpen(false)} />
           </div>
         )}
